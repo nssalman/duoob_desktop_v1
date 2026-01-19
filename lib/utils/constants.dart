@@ -6,6 +6,7 @@ class Constants{
   static const buttonColor = Color.fromRGBO(86, 190, 253, 1);
 
   static const String baseUrl = 'https://api.rpsmart.com/';
+    static const String coreBaseUrl = 'https://apiv2.rpsmart.com/'; // http://151.253.74.102/
   static const String domain = 'api.rpsmart.com';
 
   //api names
@@ -23,6 +24,8 @@ class Constants{
   static const String apiGetTaskPermission = 'api/tasks/getTasksListPermission';
   static const String apiGetUserTaskRights = 'api/tasks/getUserTaskRights';
   static const String apiMicrosoftLogin = 'api/user/getAccessTokenMS';
+
+  static const String apiGetBiReport = 'api/Dashboard/getBIReportList';
 
   static const String kD365Url = 'https://rakp-prod.operations.uae.dynamics.com/';
 

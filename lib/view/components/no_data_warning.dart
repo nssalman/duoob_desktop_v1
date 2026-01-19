@@ -20,6 +20,9 @@ class NoDataWarning extends StatelessWidget {
           if (onRefresh != null)
             ElevatedButton(
                 onPressed: onRefresh,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                ),
                 child: const Text('Refresh',
                     style: TextStyle(color: Colors.white))),
           gapH120

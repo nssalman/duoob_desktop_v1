@@ -16,6 +16,7 @@ class ApiServices {
       var data,
       String? accessToken,
       List<File>? files,
+      bool isCoreApi = false,
       bool isHeaderEmpty = false,
       bool isJson = false,
       bool isQueryParamsPost = false,
@@ -26,12 +27,14 @@ class ApiServices {
       var response;
       switch (method) {
         case apiMethod.get:
-          developer.log('${Constants.baseUrl}$url', name: 'Request');
+           developer.log(
+              '${isCoreApi ? Constants.coreBaseUrl : Constants.baseUrl}$url',
+              name: 'Request');
           response = await client.get(
               data != null
                   ? Uri.https(Constants.domain, url, data)
                   : Uri.parse(
-                      '${Constants.baseUrl}$url',
+                      '${isCoreApi ? Constants.coreBaseUrl : Constants.baseUrl}$url',
                     ),
               headers: accessToken != null
                   ? {

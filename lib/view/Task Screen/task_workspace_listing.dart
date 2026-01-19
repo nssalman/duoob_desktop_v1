@@ -13,7 +13,7 @@ import 'package:duoob_desktop_app_v1/view/components/shimmer_loader.dart';
 import 'package:duoob_desktop_app_v1/view/components/task_tile.dart';
 import 'package:duoob_desktop_app_v1/view/Task%20Screen/task_web_view_windows.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_resizable_container/flutter_resizable_container.dart';
+import 'package:multi_split_view/multi_split_view.dart';
 import 'package:provider/provider.dart';
 
 class TaskWorkspace extends StatefulWidget {
@@ -26,10 +26,11 @@ class TaskWorkspace extends StatefulWidget {
 class _TaskWorkspaceState extends State<TaskWorkspace> with SingleTickerProviderStateMixin {
   D365TaskListModel? _selectedTask;
   String? _activeUrl;
-  TaskType _selectedFilter = TaskType.administrative;
 
   final double _webViewMinHeight = 400.0;
   late TabController _tabController;
+
+  late MultiSplitViewController _multiSplitController;
 
   final List<String> tabs = [
     'ERP Tasks',
@@ -40,7 +41,12 @@ class _TaskWorkspaceState extends State<TaskWorkspace> with SingleTickerProvider
   void initState() {
     super.initState();
     _tabController = TabController(length: tabs.length, vsync: this);
-    
+    _multiSplitController = MultiSplitViewController(
+      areas: [
+        Area(size: 350, min: 300, max: 600), // Sidebar: initial 350px
+        Area(flex: 1), // WebView: takes remaining space
+      ],
+    );   
     // Initial fetch using addPostFrameCallback to avoid calling 
     // notifyListeners() during the build phase.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -55,140 +61,73 @@ class _TaskWorkspaceState extends State<TaskWorkspace> with SingleTickerProvider
   }
 
   
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<TaskProvider>(
-      builder: (context, provider, child) {
-        return ResizableContainer(
-            direction: Axis.horizontal,
-          children: [
-            // A. Task List Sidebar (Middle Pane)
-            ResizableChild(
-              divider: ResizableDivider(color: Colors.white),
-              size: ResizableSize.ratio(0.2,min: 300,max: MediaQuery.of(context).size.width * 0.4),
-              child: Container(
-                margin: EdgeInsets.fromLTRB(10,10,0,10),
-                child: Card(
-                  shadowColor: AppColors.blue,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadiusGeometry.circular(20)),
-                  color: Theme.of(context).colorScheme.surface,
-                  elevation: 5,
-                  child: Column(
-                    children: [
-                      _buildHeader(context),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 15),
-                        child: _buildGlassmorphicTabBar(),
-                      ),
-                      gapH12,
-                      Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                child: Stack(
-                  children: [
-                    TabBarView(
-                      controller: _tabController,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        // --- ERP Tasks Tab ---
-                        Column(
-                          children: [
-                            _buildSelectAllHeader(provider),
-                            const SizedBox(height: 10),
-                            Expanded(
-                              child: provider.isDD365Loading
-                                  ? const ShimmerLoader(title: 'ERP Task')
-                                  : provider.d365TaskList.isEmpty
-                                      ? NoDataWarning(
-                                          message: 'No ERP Task found',
-                                          onRefresh: () => provider.getTaskListPermission(),
-                                        )
-                                      : RefreshIndicator(
-                                          onRefresh: () => provider.getTaskListPermission(),
-                                          child: ListView.builder(
-                                            padding: EdgeInsets.only(
-                                                bottom: provider.checkForSelection() ? 20 : 120),
-                                            itemCount: provider.d365TaskList.length,
-                                            itemBuilder: (context, index) {
-                                              final task = provider.d365TaskList[index];
-                                              return D365tasktile(
-                                                task: task,
-                                                onChanged: (value) => provider.toggleSelection(index),
-                                                isSelected: task.isSelected,
-                                                onTapLink: () => _handleERPWebRedirect(context, provider, index),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                            ),
-                            // if (provider.checkForSelection())
-                            //   _buildBulkActionButtons(provider, context),
-                          ],
-                        ),
-                
-                        // --- Employee Tasks Tab ---
-                        Column(children: [
-                          Expanded(
-                            child: provider.isTaskListLoading
-                                ? const ShimmerLoader(title: 'Employee Task')
-                                : provider.userTaskMap.isEmpty
-                                    ? NoDataWarning(
-                                        message: 'No Employee Task found',
-                                        onRefresh: () => provider.getTaskListPermission(),
-                                      )
-                                    : RefreshIndicator(
-                                        onRefresh: () => provider.getTaskListPermission(),
-                                        child: ListView.builder(
-                                          padding: const EdgeInsets.only(bottom: 120),
-                                          itemCount: provider.userTaskMap.length,
-                                          itemBuilder: (context, index) {
-                                            final user = provider.userTaskMap.keys.elementAt(index);
-                                            final tasks = provider.userTaskMap[user]!;
-                
-                                            return Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                if (tasks.isNotEmpty)
-                                                  _buildUserHeader(user.taskOf ?? ''),
-                                                ...tasks.map((task) => TaskTile(
-                                                      task: task,
-                                                      onPressed: () => _handleEmployeeWebRedirect(context, provider, task),
-                                                    )),
-                                              ],
-                                            );
-                                          },
-                                        ),
-                                      ),
-                          )
-                        ])
-                      ],
-                    ),
-                  ],
-                ),
+ @override
+Widget build(BuildContext context) {
+  return Consumer<TaskProvider>(
+    builder: (context, provider, child) {
+      return MultiSplitView(
+        controller: _multiSplitController,
+        axis: Axis.horizontal,
+        // Use the builder to prevent children from rebuilding unnecessarily
+        builder: (context, area) {
+          if (area.index == 0) {
+            // SIDEBAR PANE
+            return _buildSidebarContent(provider);
+          } else {
+            // WEBVIEW PANE
+            return TaskWebViewWindows(
+              key: ValueKey(_activeUrl ?? 'empty'),
+              url: _activeUrl,
+            );
+          }
+        },
+      );
+    },
+  );
+}
+Widget _buildSidebarContent(TaskProvider provider) {
+  return Container(
+    margin: const EdgeInsets.fromLTRB(10, 10, 0, 10),
+    child: Card(
+      shadowColor: AppColors.blue,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      color: Theme.of(context).colorScheme.surface,
+      elevation: 5,
+      child: Column(
+        children: [
+          // 1. Header (Search/Profile etc)
+          _buildHeader(context),
+          
+          // 2. Tab Bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            child: _buildGlassmorphicTabBar(),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // 3. The Task Lists (Inside TabBarView)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+              child: TabBarView(
+                controller: _tabController,
+                physics: const NeverScrollableScrollPhysics(),
+                children: const [
+                  // Using the scoped widgets we created to preserve scroll state
+                  ERPTaskListSection(), 
+                  EmployeeTaskListSection(),
+                ],
               ),
             ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        
-            // B. Detail View (Right Pane)
-           ResizableChild(
-  child: _activeUrl == null
-      ? _buildEmptyState()
-      : TaskWebViewWindows(
-      // THIS KEY IS CRITICAL:
-      // It forces a clean native window re-init every time the URL changes.
-      key: ValueKey(_activeUrl), 
-      url: _activeUrl!,
+          ),
+        ],
+      ),
     ),
-),
-          ],
-        );
-      }
-    );
-  }
+  );
+}
 Widget _buildSelectAllHeader(TaskProvider provider) {
     return Container(
       decoration: BoxDecoration(
@@ -249,9 +188,9 @@ Widget _buildSelectAllHeader(TaskProvider provider) {
 
  void _handleERPWebRedirect(BuildContext context, TaskProvider provider, int index) {
   final task = provider.d365TaskList[index];
-  if (task.linkToWeb != null) {
+  if (task.notificationId != null) {
     setState(() {
-      _activeUrl = task.linkToWeb;
+      _activeUrl = 'https://rakp.rpsmart.com/d365emailnotifications/D365FnOWorkflowsubmission.aspx?NotificationID=${task.notificationId}';
       // Also update _selectedTask if you use it for other UI highlights
       _selectedTask = task; 
     });
@@ -286,111 +225,6 @@ Future<void> _handleEmployeeWebRedirect(BuildContext context, TaskProvider provi
     );
   }
 
-  // Widget _buildFilterTabs() {
-  //   return Padding(
-  //     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-  //     child: SizedBox(
-  //       width: double.infinity,
-  //       child: SegmentedButton<TaskType>(
-  //         style: ButtonStyle(
-            
-  //         ),
-  //         segments: const [
-  //           ButtonSegment(
-  //             value: TaskType.administrative,
-  //             label: Text('ERP'),
-  //             icon: Icon(Icons.folder_shared_outlined, size: 16),
-  //           ),
-  //           ButtonSegment(
-  //             value: TaskType.technical,
-  //             label: Text('Employee'),
-  //             icon: Icon(Icons.terminal_outlined, size: 16),
-  //           ),
-  //         ],
-  //         selected: {_selectedFilter},
-  //         onSelectionChanged: (Set<TaskType> newSelection) {
-  //           setState(() {
-  //             _selectedFilter = newSelection.first;
-  //             _selectedTask = null;
-  //           });
-  //         },
-  //       ),
-  //     ),
-  //   );
-  // }
-
-
-// Widget _buildGlassmorphicFilterTabs(BuildContext context) {
-//   final themeProvider = Provider.of<ThemeProvider>(context);
-//   final isDark = themeProvider.isDarkMode;
-
-//   return Padding(
-//     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-//     child: ClipRRect(
-//       borderRadius: BorderRadius.circular(12),
-//       child: BackdropFilter(
-//         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-//         child: Container(
-//           decoration: BoxDecoration(
-//             color: isDark 
-//                 ? Colors.white.withOpacity(0.05) 
-//                 : const Color(0xFF102849).withOpacity(0.05),
-//             borderRadius: BorderRadius.circular(12),
-//             border: Border.all(
-//               color: Colors.white.withOpacity(0.1),
-//               width: 1,
-//             ),
-//           ),
-//           child: SegmentedButton<TaskType>(
-//             // --- Styling to achieve the look ---
-//             style: ButtonStyle(
-//               backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-//                 if (states.contains(WidgetState.selected)) {
-//                   return const Color(0xFF102849); // Your Primary Navy
-//                 }
-//                 return Colors.transparent;
-//               }),
-//               foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-//                 if (states.contains(WidgetState.selected)) {
-//                   return Colors.white;
-//                 }
-//                 return isDark ? Colors.white70 : const Color(0xFF102849);
-//               }),
-//               side: WidgetStateProperty.all(BorderSide.none), // Removes divider lines
-//               shape: WidgetStateProperty.all(
-//                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-//               ),
-//               padding: WidgetStateProperty.all(
-//                 const EdgeInsets.symmetric(vertical: 16),
-//               ),
-//             ),
-//             // --- Logic and Content ---
-//             showSelectedIcon: false, // Cleaner glass look
-//             segments: const [
-//               ButtonSegment(
-//                 value: TaskType.administrative,
-//                 label: Text('ERP', style: TextStyle(fontWeight: FontWeight.w600)),
-//                 icon: Icon(Icons.folder_shared_outlined, size: 18),
-//               ),
-//               ButtonSegment(
-//                 value: TaskType.technical,
-//                 label: Text('Employee', style: TextStyle(fontWeight: FontWeight.w600)),
-//                 icon: Icon(Icons.terminal_outlined, size: 18),
-//               ),
-//             ],
-//             selected: {_selectedFilter},
-//             onSelectionChanged: (Set<TaskType> newSelection) {
-//               setState(() {
-//                 _selectedFilter = newSelection.first;
-//                 _selectedTask = null;
-//               });
-//             },
-//           ),
-//         ),
-//       ),
-//     ),
-//   );
-// }
 
 Widget _buildGlassmorphicTabBar() {
     return ClipRRect(
@@ -460,36 +294,119 @@ Widget _buildGlassmorphicTabBar() {
     );
   }
 
-    Widget _buildTaskList() {
+}
 
-    return ListView.builder(
-      itemCount: 10,
-      padding: EdgeInsets.symmetric(horizontal: 10),
-      itemBuilder: (context, index) {
-        final task = D365TaskListModel();
-        final isSelected = _selectedTask?.notificationId == task.notificationId;
+class ERPTaskListSection extends StatefulWidget {
+  const ERPTaskListSection({super.key});
 
-        return D365tasktile(task: task, onChanged: (val){});
+  @override
+  State<ERPTaskListSection> createState() => _ERPTaskListSectionState();
+}
+
+class _ERPTaskListSectionState extends State<ERPTaskListSection> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // Prevents the list from disposing
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // Required for KeepAlive
+    return Consumer<TaskProvider>(
+      builder: (context, provider, child) {
+        if (provider.isDD365Loading) return const ShimmerLoader(title: 'ERP Task');
+        
+        return ListView.builder(
+          key: const PageStorageKey('erp_list'), // Helps preserve scroll position
+          itemCount: provider.d365TaskList.length,
+          itemBuilder: (context, index) {
+            final task = provider.d365TaskList[index];
+            return D365tasktile(
+              task: task,
+              // Use the parent's logic via context if needed, 
+              // or pass the callback down.
+              onChanged: (value) => provider.toggleSelection(index),
+              onTapLink: () => context.findAncestorStateOfType<_TaskWorkspaceState>()?._handleERPWebRedirect(context, provider, index),
+              // ... other props
+            );
+          },
+        );
+      },
+    );
+  }
+}
+class EmployeeTaskListSection extends StatefulWidget {
+  const EmployeeTaskListSection({super.key});
+
+  @override
+  State<EmployeeTaskListSection> createState() => _EmployeeTaskListSectionState();
+}
+
+class _EmployeeTaskListSectionState extends State<EmployeeTaskListSection> 
+    with AutomaticKeepAliveClientMixin {
+  
+  // This ensures the tab doesn't dispose when you switch to 'ERP Tasks'
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    
+    return Consumer<TaskProvider>(
+      builder: (context, provider, child) {
+        if (provider.isTaskListLoading) {
+          return const ShimmerLoader(title: 'Employee Task');
+        }
+
+        if (provider.userTaskMap.isEmpty) {
+          return NoDataWarning(
+            message: 'No Employee Task found',
+            onRefresh: () => provider.getTaskListPermission(),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () => provider.getTaskListPermission(),
+          child: ListView.builder(
+            // The PageStorageKey is CRITICAL for keeping the scroll position
+            key: const PageStorageKey('employee_task_list'),
+            padding: const EdgeInsets.only(bottom: 120),
+            itemCount: provider.userTaskMap.length,
+            itemBuilder: (context, index) {
+              final user = provider.userTaskMap.keys.elementAt(index);
+              final tasks = provider.userTaskMap[user]!;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (tasks.isNotEmpty)
+                    _buildUserHeader(user.taskOf ?? ''),
+                  ...tasks.map((task) => TaskTile(
+                        task: task,
+                        onPressed: () {
+                          // Access the parent state to call the redirect logic
+                          final parentState = context.findAncestorStateOfType<_TaskWorkspaceState>();
+                          if (parentState != null) {
+                            parentState._handleEmployeeWebRedirect(context, provider, task);
+                          }
+                        },
+                      )),
+                ],
+              );
+            },
+          ),
+        );
       },
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.touch_app_outlined, size: 64, color: Theme.of(context).disabledColor),
-          const SizedBox(height: 16),
-          Text(
-            'Select a task to view details',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Theme.of(context).disabledColor),
-          ),
-        ],
+  // Extracted helper from your original code to maintain consistency
+  Widget _buildUserHeader(String name) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Text(
+        name,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
       ),
     );
   }
-
 }
-
-enum TaskType { administrative, technical }

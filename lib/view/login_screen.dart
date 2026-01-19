@@ -1,5 +1,9 @@
+import 'dart:developer';
+
 import 'package:duoob_desktop_app_v1/controller/login_provider.dart';
 import 'package:duoob_desktop_app_v1/utils/size_config.dart';
+import 'package:duoob_desktop_app_v1/view/Task%20Screen/task_web_view_windows.dart';
+import 'package:duoob_desktop_app_v1/view/components/auth_webview.dart';
 import 'package:duoob_desktop_app_v1/view/main_screen.dart';
 import 'package:duoob_desktop_app_v1/view/main_screen1.dart';
 import 'package:flutter/material.dart';
@@ -90,9 +94,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: loginProvider.isLoading 
                       ? null 
                       : () async {
-                          // Logic to get code from Microsoft (e.g., via a WebView)
-                          // String? code = await Navigator.push(...);
-                          // if (code != null) loginProvider.login(context: context, microsoftCode: code);
+                         final code = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => AuthWebViewWindows()
+                                ),
+                              );
+                          if (code != null) loginProvider.login(context: context, microsoftCode: code);
                         },
                     icon: const Icon(Icons.window, size: 20),
                     label: const Text('Sign in with Microsoft'),

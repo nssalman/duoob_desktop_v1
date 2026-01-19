@@ -10,20 +10,53 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
-  webview_windows: ^0.4.0
   provider: ^6.1.5+1
   window_manager: ^0.5.1
-  flutter_resizable_container: ^4.2.0
   auto_size_text: ^3.0.0
   readmore: ^3.0.0
   http: ^1.6.0
   shared_preferences: ^2.5.4
   shimmer: ^3.0.0
   flutter_inappwebview: ^6.1.5
+  lottie: ^3.3.2
+  path_provider: ^2.1.5
+  multi_split_view: ^3.6.1
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  msix: ^3.16.12
+msix_config:
+  display_name: Duoob
+  publisher_display_name: RAK Properties
+  identity_name: io.rak.rakpmsmart
+  msix_version: 1.0.0.0
+  capabilities: internetClient
+  publisher: CN=RAKProperties
+  certificate_path: C:\Flutter\Projects\build\my_cert.pfx
+  certificate_password: Password123
+  logo_path: assets/images/App_Logo.png # Path to your app icon
+
+  package_rename: ^1.10.1
+package_rename_config:
+  # This sets the name shown on the home screen/taskbar
+  app_name: "Duoob"
+  
+  # This sets the internal ID (e.g., com.example.app)
+  package_name: "io.rak.rakpmsmart"
+
+    
+  windows:
+    app_name: "Duoob"
+    organization: "RAK Properties"
+    copyright_private_party: ""
+
+  macos:
+    app_name: "Duoob" # Product name
+    package_name: "io.rak.rakpmsmart" # Product Bundle Identifier
+    copyright_notice: "" # Copyright notice
+
 
   flutter_lints: ^6.0.0
 
@@ -35,6 +68,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/animations/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

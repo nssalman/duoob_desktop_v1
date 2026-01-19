@@ -1,6 +1,7 @@
 import 'package:duoob_desktop_app_v1/view/Report%20Screen/report_screen.dart';
 import 'package:duoob_desktop_app_v1/view/Task%20Screen/task_web_view_windows.dart';
 import 'package:duoob_desktop_app_v1/view/Task%20Screen/task_workspace_listing.dart';
+import 'package:duoob_desktop_app_v1/view/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
 
 class MainScreen extends StatefulWidget {
@@ -67,7 +68,7 @@ class _MainScreenState extends State<MainScreen> {
                 TaskWorkspace(),
                 // PlaceholderPage(title: 'Reports & Analytics'),
                 ReportWorkspace(),
-                PlaceholderPage(title: 'Settings'),
+                SettingsScreen(),
               ],
             ),
           ),

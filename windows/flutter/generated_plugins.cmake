@@ -5,7 +5,6 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   flutter_inappwebview_windows
   screen_retriever_windows
-  webview_windows
   window_manager
 )
 
