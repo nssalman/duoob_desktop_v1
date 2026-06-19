@@ -33,6 +33,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: "^0.14.4"
+  msix: ^3.16.12
+  package_rename: ^1.10.1
+  flutter_lints: ^6.0.0
 
 flutter_launcher_icons:
   android: false
@@ -42,7 +45,6 @@ flutter_launcher_icons:
     generate: true
     image_path: "assets/images/App_Logo.png"
 
-msix: ^3.16.12
 msix_config:
   display_name: Duoob
   publisher_display_name: RAK Properties
@@ -50,31 +52,22 @@ msix_config:
   msix_version: 1.0.0.0
   capabilities: internetClient
   publisher: CN=RAKProperties
-  certificate_path: C:\Flutter\Projects\build\my_cert.pfx
-  certificate_password: Password123
-  logo_path: assets/images/App_Logo.png # Path to your app icon
+  certificate_path: C:\Flutter\Projects\Duoob.pfx
+  certificate_password: "Rak&D%oB&Cert#%"  # Wrapped in quotes due to special characters
+  generate_test_cert: false
+  logo_path: assets/images/App_Logo.png
 
-  package_rename: ^1.10.1
 package_rename_config:
-  # This sets the name shown on the home screen/taskbar
   app_name: "Duoob"
-  
-  # This sets the internal ID (e.g., com.example.app)
   package_name: "io.rak.rakpmsmart"
-
-    
   windows:
     app_name: "Duoob"
     organization: "RAK Properties"
     copyright_private_party: ""
-
   macos:
-    app_name: "Duoob" # Product name
-    package_name: "io.rak.rakpmsmart" # Product Bundle Identifier
-    copyright_notice: "" # Copyright notice
-
-
-  flutter_lints: ^6.0.0
+    app_name: "Duoob"
+    package_name: "io.rak.rakpmsmart"
+    copyright_notice: ""
 
 flutter:
 
