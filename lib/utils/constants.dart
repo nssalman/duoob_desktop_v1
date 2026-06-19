@@ -29,6 +29,16 @@ class Constants{
 
   static const String kD365Url = 'https://rakp-prod.operations.uae.dynamics.com/';
 
+  static const String reportsDashboardUrl =
+      'https://rakp.rpsmart.com/version2/mydashboard.aspx';
+
+  static const String myRakpUrl =
+      'https://rakp.rpsmart.com/version2/index.aspx';
+
+  static const String copilotBackendBaseUrl = 'https://apiv2.rpsmart.com';
+  static const String copilotScope =
+      'api://4ea53c57-1ea0-4fe6-b8e8-317b05a6cb1e/access_as_user';
+
   static const String apiUploadImg = 'api/account/user/PostPunchingUserImage';
   static const String apiPunchIn = 'api/punching/savepunchingdetails';
   static const String apiPunchInImages = 'PunchingFiles/';

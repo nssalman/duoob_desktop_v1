@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:duoob_desktop_app_v1/controller/login_provider.dart';
-import 'package:duoob_desktop_app_v1/controller/report_provider.dart';
 import 'package:duoob_desktop_app_v1/controller/task_provider.dart';
 import 'package:duoob_desktop_app_v1/controller/theme_provider.dart';
 import 'package:duoob_desktop_app_v1/services/theme.dart';
@@ -37,7 +36,6 @@ void main() async{
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => LoginProvider()), 
         ChangeNotifierProvider(create: (_) => TaskProvider()), 
-        ChangeNotifierProvider(create: (_) => ReportProvider()),
       ],
       child: const MyApp(),
     ),

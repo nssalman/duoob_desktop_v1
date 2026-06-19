@@ -17,7 +17,9 @@ import 'package:multi_split_view/multi_split_view.dart';
 import 'package:provider/provider.dart';
 
 class TaskWorkspace extends StatefulWidget {
-  const TaskWorkspace({super.key});
+  const TaskWorkspace({super.key, this.suspendWebView = false});
+
+  final bool suspendWebView;
 
   @override
   State<TaskWorkspace> createState() => _TaskWorkspaceState();
@@ -60,6 +62,15 @@ class _TaskWorkspaceState extends State<TaskWorkspace> with SingleTickerProvider
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(TaskWorkspace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.suspendWebView && widget.suspendWebView) {
+      _activeUrl = null;
+      _selectedTask = null;
+    }
+  }
+
   
  @override
 Widget build(BuildContext context) {
@@ -74,10 +85,9 @@ Widget build(BuildContext context) {
             // SIDEBAR PANE
             return _buildSidebarContent(provider);
           } else {
-            // WEBVIEW PANE
             return TaskWebViewWindows(
               key: ValueKey(_activeUrl ?? 'empty'),
-              url: _activeUrl,
+              url: widget.suspendWebView ? null : _activeUrl,
             );
           }
         },
@@ -98,7 +108,7 @@ Widget _buildSidebarContent(TaskProvider provider) {
       child: Column(
         children: [
           // 1. Header (Search/Profile etc)
-          _buildHeader(context),
+          _buildHeader(context, provider),
           
           // 2. Tab Bar
           Padding(
@@ -214,13 +224,47 @@ Future<void> _handleEmployeeWebRedirect(BuildContext context, TaskProvider provi
   }
 }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, TaskProvider provider) {
+    final isErpTab = _tabController.index == 0;
+    final isLoading =
+        isErpTab ? provider.isDD365Loading : provider.isTaskListLoading;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-      alignment: Alignment.centerLeft,
-      child: Text(
-        'My Tasks',
-        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+      padding: const EdgeInsets.fromLTRB(20, 12, 12, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'My Tasks',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: isLoading
+                ? null
+                : () {
+                    if (isErpTab) {
+                      provider.getd365TaskList();
+                    } else {
+                      provider.getTaskListPermission();
+                    }
+                  },
+            icon: isLoading
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  )
+                : const Icon(Icons.refresh),
+          ),
+        ],
       ),
     );
   }
@@ -313,21 +357,29 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection> with AutomaticK
     return Consumer<TaskProvider>(
       builder: (context, provider, child) {
         if (provider.isDD365Loading) return const ShimmerLoader(title: 'ERP Task');
-        
-        return ListView.builder(
-          key: const PageStorageKey('erp_list'), // Helps preserve scroll position
-          itemCount: provider.d365TaskList.length,
-          itemBuilder: (context, index) {
-            final task = provider.d365TaskList[index];
-            return D365tasktile(
-              task: task,
-              // Use the parent's logic via context if needed, 
-              // or pass the callback down.
-              onChanged: (value) => provider.toggleSelection(index),
-              onTapLink: () => context.findAncestorStateOfType<_TaskWorkspaceState>()?._handleERPWebRedirect(context, provider, index),
-              // ... other props
-            );
-          },
+
+        if (provider.d365TaskList.isEmpty) {
+          return NoDataWarning(
+            message: 'No ERP Task found',
+            onRefresh: () => provider.getd365TaskList(),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () => provider.getd365TaskList(),
+          child: ListView.builder(
+            key: const PageStorageKey('erp_list'), // Helps preserve scroll position
+            padding: const EdgeInsets.only(bottom: 120),
+            itemCount: provider.d365TaskList.length,
+            itemBuilder: (context, index) {
+              final task = provider.d365TaskList[index];
+              return D365tasktile(
+                task: task,
+                onChanged: (value) => provider.toggleSelection(index),
+                onTapLink: () => context.findAncestorStateOfType<_TaskWorkspaceState>()?._handleERPWebRedirect(context, provider, index),
+              );
+            },
+          ),
         );
       },
     );
