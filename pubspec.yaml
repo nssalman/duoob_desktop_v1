@@ -1,6 +1,6 @@
 name: duoob_desktop_app_v1
 description: "A new Flutter project."
-version: 1.0.0+2
+version: 1.0.1+4
 
 environment:
   sdk: ^3.10.1
@@ -52,7 +52,7 @@ msix_config:
   msix_version: 1.0.0.0
   capabilities: internetClient
   publisher: CN=RAKProperties
-  certificate_path: C:\Flutter\Projects\Duoob.pfx
+  certificate_path: D:\Projects\Duoob.pfx
   certificate_password: "Rak&D%oB&Cert#%"  # Wrapped in quotes due to special characters
   generate_test_cert: false
   logo_path: assets/images/App_Logo.png
