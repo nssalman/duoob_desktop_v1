@@ -138,10 +138,27 @@ class ApiServices {
           return jsonResponse;
         }
       } else {
-        if (response.body != null) {
-          var jsonResponse = jsonDecode(response.body);
-          return jsonResponse;
+        final body = response.body;
+        if (body.isNotEmpty) {
+          try {
+            return jsonDecode(body);
+          } catch (e) {
+            developer.log(
+              'Non-JSON error body (${response.statusCode}): $body',
+              name: 'ApiServices',
+            );
+            return {
+              'error': 'invalid_response',
+              'error_description':
+                  'Request failed (${response.statusCode}). Please try again.',
+            };
+          }
         }
+        return {
+          'error': 'request_failed',
+          'error_description':
+              'Request failed (${response.statusCode}). Please try again.',
+        };
       }
     } catch (e) {
       // getxSnackbar(message: e.toString(), isError: true);

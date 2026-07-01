@@ -12,6 +12,7 @@ class MyRakpWorkspace extends StatelessWidget {
       child: TaskWebViewWindows(
         key: const ValueKey(Constants.myRakpUrl),
         url: Constants.myRakpUrl,
+        refreshUrlOnSuccess: true,
       ),
     );
   }

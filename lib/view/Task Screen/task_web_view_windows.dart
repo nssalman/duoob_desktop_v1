@@ -11,7 +11,15 @@ enum TaskResult { none, success, failure }
 
 class TaskWebViewWindows extends StatefulWidget {
   final String? url;
-  const TaskWebViewWindows({super.key, this.url});
+  final bool refreshUrlOnSuccess;
+  final VoidCallback? onSubmissionSuccess;
+
+  const TaskWebViewWindows({
+    super.key,
+    this.url,
+    this.refreshUrlOnSuccess = false,
+    this.onSubmissionSuccess,
+  });
 
   @override
   State<TaskWebViewWindows> createState() => _TaskWebViewWindowsState();
@@ -59,9 +67,7 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
       _canGoForward = false;
     });
 
-    _webViewController?.loadUrl(
-      urlRequest: URLRequest(url: WebUri(newUrl)),
-    );
+    _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(newUrl)));
   }
 
   void _safeSetState(VoidCallback fn) {
@@ -130,8 +136,8 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ],
@@ -146,14 +152,31 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
       _currentResult = isSuccess ? TaskResult.success : TaskResult.failure;
     });
 
-    // Wait for animation to play (e.g., 2.5 seconds)
     await Future.delayed(const Duration(milliseconds: 2500));
 
-    // Reset to empty state
+    if (isSuccess && widget.refreshUrlOnSuccess && widget.url != null) {
+      final reloadUrl = widget.url!;
+      _safeSetState(() {
+        _currentResult = TaskResult.none;
+        _activeUrl = reloadUrl;
+        _isLoading = true;
+        _canGoBack = false;
+        _canGoForward = false;
+      });
+      await _webViewController?.loadUrl(
+        urlRequest: URLRequest(url: WebUri(reloadUrl)),
+      );
+      return;
+    }
+
     _safeSetState(() {
       _currentResult = TaskResult.none;
       _activeUrl = null;
     });
+
+    if (isSuccess) {
+      widget.onSubmissionSuccess?.call();
+    }
   }
 
   void _handleTaskCompletion() async {
@@ -187,107 +210,109 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
             children: [
               Positioned.fill(
                 child: InAppWebView(
-            webViewEnvironment: webViewEnvironment,
-            initialSettings: InAppWebViewSettings(
-              javaScriptEnabled: true,
-              useOnDownloadStart: true,
-              mediaPlaybackRequiresUserGesture: false,
-              allowsInlineMediaPlayback: true,
-              allowsBackForwardNavigationGestures: true,
-              allowFileAccessFromFileURLs: true,
-              allowUniversalAccessFromFileURLs: true,
-            ),
-            initialUrlRequest: URLRequest(url: WebUri(_activeUrl!)),
-            onWebViewCreated: (controller) {
-              _webViewController = controller;
-              controller.addJavaScriptHandler(
-                handlerName: "notifyClose",
-                callback: (args) => _triggerOverlay(true),
-              );
-              _updateNavigationState();
-            },
-            onUpdateVisitedHistory: (controller, url, isReload) {
-              _updateNavigationState();
-            },
-            onLoadStart: (controller, url) {
-              _safeSetState(() => _isLoading = true);
-              if (url != null) {
-                _safeSetState(() => _activeUrl = url.toString());
-              }
-            },
-            onLoadStop: (controller, url) async {
-              log(url.toString(), name: 'onLoadStop');
-              _safeSetState(() => _isLoading = false);
-              await _updateNavigationState();
+                  webViewEnvironment: webViewEnvironment,
+                  initialSettings: InAppWebViewSettings(
+                    javaScriptEnabled: true,
+                    useOnDownloadStart: true,
+                    mediaPlaybackRequiresUserGesture: false,
+                    allowsInlineMediaPlayback: true,
+                    allowsBackForwardNavigationGestures: true,
+                    allowFileAccessFromFileURLs: true,
+                    allowUniversalAccessFromFileURLs: true,
+                  ),
+                  initialUrlRequest: URLRequest(url: WebUri(_activeUrl!)),
+                  onWebViewCreated: (controller) {
+                    _webViewController = controller;
+                    controller.addJavaScriptHandler(
+                      handlerName: "notifyClose",
+                      callback: (args) => _triggerOverlay(true),
+                    );
+                    _updateNavigationState();
+                  },
+                  onUpdateVisitedHistory: (controller, url, isReload) {
+                    _updateNavigationState();
+                  },
+                  onLoadStart: (controller, url) {
+                    _safeSetState(() => _isLoading = true);
+                    if (url != null) {
+                      _safeSetState(() => _activeUrl = url.toString());
+                    }
+                  },
+                  onLoadStop: (controller, url) async {
+                    log(url.toString(), name: 'onLoadStop');
+                    _safeSetState(() => _isLoading = false);
+                    await _updateNavigationState();
 
-              final currentUrl = url.toString();
+                    final currentUrl = url.toString();
 
-              // URL-based trigger logic
-              if (currentUrl.contains(successUrl) ||
-                  currentUrl.contains(successUrl1)) {
-                _triggerOverlay(true);
-              } else if (currentUrl.contains(failureUrl)) {
-                _triggerOverlay(false);
-              }
-            },
-            onProgressChanged: (controller, progress) {
-              if (progress == 100) _safeSetState(() => _isLoading = false);
-            },
-            onReceivedError: (controller, request, error) {
-              if (request.url.toString() == "about:blank") return;
-              log("WebView Error: ${error.description}");
-            },
+                    // URL-based trigger logic
+                    if (currentUrl.contains(successUrl) ||
+                        currentUrl.contains(successUrl1)) {
+                      _triggerOverlay(true);
+                    } else if (currentUrl.contains(failureUrl)) {
+                      _triggerOverlay(false);
+                    }
+                  },
+                  onProgressChanged: (controller, progress) {
+                    if (progress == 100)
+                      _safeSetState(() => _isLoading = false);
+                  },
+                  onReceivedError: (controller, request, error) {
+                    if (request.url.toString() == "about:blank") return;
+                    log("WebView Error: ${error.description}");
+                  },
 
-            // onCreateWindow: (controller, createWindowRequest) async {
-            //   await Navigator.push(
-            //     context,
-            //     MaterialPageRoute(
-            //       builder: (context) => NewTaskViewScreen(
-            //         createWindowRequest: createWindowRequest,
-            //       ),
-            //     ),
-            //   );
-            //   // await controller.reload();
-            //   // This is crucial: Returning `true` signals that your app
-            //   // has handled the request and the WebView shouldn't open a new native window.
-            //   return true;
-            // },
-            onDownloadStart: (controller, url) async {
-              // final FileDownloadService _downloader =
-              //     FileDownloadService();
-              String? filePath = await downloadWithWebViewCookies(
-                url: url.toString(),
-                fileName: 'document',
-                cookieUrl: url,
-              );
+                  // onCreateWindow: (controller, createWindowRequest) async {
+                  //   await Navigator.push(
+                  //     context,
+                  //     MaterialPageRoute(
+                  //       builder: (context) => NewTaskViewScreen(
+                  //         createWindowRequest: createWindowRequest,
+                  //       ),
+                  //     ),
+                  //   );
+                  //   // await controller.reload();
+                  //   // This is crucial: Returning `true` signals that your app
+                  //   // has handled the request and the WebView shouldn't open a new native window.
+                  //   return true;
+                  // },
+                  onDownloadStart: (controller, url) async {
+                    // final FileDownloadService _downloader =
+                    //     FileDownloadService();
+                    String? filePath = await downloadWithWebViewCookies(
+                      url: url.toString(),
+                      fileName: 'document',
+                      cookieUrl: url,
+                    );
 
-              if (filePath != null) {
-                openDownloadedFile(filePath);
-              }
-            },
-          ),
-        ),
+                    if (filePath != null) {
+                      openDownloadedFile(filePath);
+                    }
+                  },
+                ),
+              ),
 
-        // 1. Loading Indicator
-        if (_isLoading)
-          Container(
-            color: Theme.of(context).colorScheme.surface,
-            child: const Center(child: CircularProgressIndicator()),
-          ),
+              // 1. Loading Indicator
+              if (_isLoading)
+                Container(
+                  color: Theme.of(context).colorScheme.surface,
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
 
-        // 2. Success Overlay
-        if (_currentResult == TaskResult.success)
-          _buildOverlay(
-            color: Colors.white,
-            asset: 'assets/animations/success.json',
-          ),
+              // 2. Success Overlay
+              if (_currentResult == TaskResult.success)
+                _buildOverlay(
+                  color: Colors.white,
+                  asset: 'assets/animations/success.json',
+                ),
 
-        // 3. Failure Overlay
-        if (_currentResult == TaskResult.failure)
-          _buildOverlay(
-            color: Colors.white,
-            asset: 'assets/animations/error.json', // Your error animation path
-          ),
+              // 3. Failure Overlay
+              if (_currentResult == TaskResult.failure)
+                _buildOverlay(
+                  color: Colors.white,
+                  asset:
+                      'assets/animations/error.json', // Your error animation path
+                ),
             ],
           ),
         ),

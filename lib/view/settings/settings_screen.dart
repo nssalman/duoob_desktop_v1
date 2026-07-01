@@ -6,6 +6,7 @@ import 'package:duoob_desktop_app_v1/view/components/app_version_label.dart';
 import 'package:duoob_desktop_app_v1/view/components/custom_dialogue.dart';
 import 'package:duoob_desktop_app_v1/view/root_wrapper.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -58,6 +59,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _logout() async {
     await _userRepository.clear();
     _userRepository.setUserLoggedIn(false);
+    final cookieManager = CookieManager.instance();
+    await cookieManager.deleteCookies(
+      url: WebUri('https://login.microsoftonline.com'),
+    );
+    await cookieManager.deleteCookies(
+      url: WebUri('https://login.live.com'),
+    );
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => RootWrapper()),

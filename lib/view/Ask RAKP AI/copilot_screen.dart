@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer';
 
 import 'package:duoob_desktop_app_v1/utils/colors.dart';
+import 'package:duoob_desktop_app_v1/view/components/modern_loading_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -12,6 +13,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 const _kDirectLineBaseUrl =
     'https://europe.directline.botframework.com/v3/directline';
+
+const _thinkingIndicatorText = 'Thinking';
 
 int _parseExpiresIn(Map<String, dynamic> json) {
   final val = json['expires_in'] ?? json['expiresIn'];
@@ -453,7 +456,7 @@ class DirectLineClient {
         _messagesController.add(
           ChatMessage(
             id: activity['id'] as String? ?? _newId(),
-            text: 'Copilot is typing...',
+            text: _thinkingIndicatorText,
             author: ChatAuthor.system,
             createdAt: DateTime.now(),
           ),
@@ -585,7 +588,7 @@ class CopilotChatController extends ChangeNotifier {
 
       client.messages.listen((ChatMessage message) {
         if (message.author == ChatAuthor.system &&
-            message.text == 'Copilot is typing...') {
+            message.text == _thinkingIndicatorText) {
           if (_messages.isNotEmpty &&
               _messages.last.author == ChatAuthor.system) {
             return;
@@ -593,7 +596,7 @@ class CopilotChatController extends ChangeNotifier {
         } else if (message.author == ChatAuthor.bot) {
           _messages.removeWhere((m) =>
               m.author == ChatAuthor.system &&
-              m.text == 'Copilot is typing...');
+              m.text == _thinkingIndicatorText);
 
           final lastUserIndex =
               _messages.lastIndexWhere((m) => m.author == ChatAuthor.user);
@@ -780,7 +783,7 @@ class _CopilotChatPageState extends State<CopilotChatPage>
             ),
           Expanded(
             child: _controller.isInitializing
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: ModernLoadingIndicator())
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(16),
@@ -842,13 +845,11 @@ class _CopilotChatPageState extends State<CopilotChatPage>
                         ? null
                         : _handleSend,
                     icon: _controller.isSending
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
+                        ? const ModernLoadingIndicator(
+                            color: Colors.white,
+                            compact: true,
+                            dotSize: 6,
+                            spacing: 4,
                           )
                         : const Icon(
                             Icons.send_outlined,
@@ -920,11 +921,30 @@ class _ChatBubble extends StatelessWidget {
     final bool isUser = message.author == ChatAuthor.user;
     final bool isSystem = message.author == ChatAuthor.system;
 
-    final Color bubbleColor = isSystem
-        ? Colors.amber.shade100
-        : isUser
-            ? AppColors.blue
-            : Colors.grey.shade200;
+    if (isSystem) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: ModernLoadingIndicator(
+              label: _thinkingIndicatorText,
+              color: AppColors.blue.withValues(alpha: 0.85),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final Color bubbleColor = isUser
+        ? AppColors.blue
+        : Colors.grey.shade200;
 
     final Color textColor = isUser ? Colors.white : Colors.black87;
     final Color actionColor =
@@ -967,30 +987,28 @@ class _ChatBubble extends StatelessWidget {
                 },
               ),
             ),
-            if (!isSystem) ...[
-              const SizedBox(height: 8),
-              Divider(
-                height: 1,
-                color: actionColor.withValues(alpha: 0.22),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _BubbleIconAction(
-                    tooltip: 'Copy',
-                    icon: Icons.content_copy_outlined,
-                    color: actionColor,
-                    onPressed: () => _copyText(context),
-                  ),
-                  _BubbleIconAction(
-                    tooltip: 'Use in input',
-                    icon: Icons.reply_outlined,
-                    color: actionColor,
-                    onPressed: () => onUseInInput(message.text),
-                  ),
-                ],
-              ),
-            ],
+            const SizedBox(height: 8),
+            Divider(
+              height: 1,
+              color: actionColor.withValues(alpha: 0.22),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _BubbleIconAction(
+                  tooltip: 'Copy',
+                  icon: Icons.content_copy_outlined,
+                  color: actionColor,
+                  onPressed: () => _copyText(context),
+                ),
+                _BubbleIconAction(
+                  tooltip: 'Use in input',
+                  icon: Icons.reply_outlined,
+                  color: actionColor,
+                  onPressed: () => onUseInInput(message.text),
+                ),
+              ],
+            ),
           ],
         ),
       ),

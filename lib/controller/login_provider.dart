@@ -61,45 +61,120 @@ class LoginProvider with ChangeNotifier {
         response = await ApiServices.execute(method: apiMethod.post, url: Constants.apiLogin,data: data);
       }
 
-      if (response != null ) {
-        // 1. Process Login Data
-        LoginResponseModel loginResponse = LoginResponseModel.fromJson(response);
+      if (response == null) {
+        _showErrorDialog(
+          context,
+          'Authentication failed',
+          'Unable to connect. Please try again.',
+        );
+        return;
+      }
+
+      if (response is Map && _isLoginErrorResponse(response)) {
+        _showErrorDialog(
+          context,
+          'Authentication failed',
+          _loginErrorMessage(response),
+        );
+        return;
+      }
+
+      final loginResponse = LoginResponseModel.fromJson(response);
+
+      if (!_hasValidAccessToken(loginResponse)) {
+        _showErrorDialog(
+          context,
+          'Authentication failed',
+          _loginErrorMessage(response),
+        );
+        return;
+      }
+
         await userRepository.storeLoginResponse(loginResponse);
         await userRepository.storeUserToken(loginResponse.accessToken!);
         await userRepository.setUserLoggedIn(true);
 
-        // 2. Fetch and Store Profile
-         String token, userId;
-      LoginResponseModel? responseModel = await userRepository.getLoginResponse();
-      token = responseModel!.accessToken!;
-      userId = responseModel.userId!;
+        final responseModel = await userRepository.getLoginResponse();
+        final token = responseModel?.accessToken;
+        final userId = responseModel?.userId;
 
-      Map<String, String> data = {
-        "UID": userId,
-      };
-        var profileRes = await ApiServices.execute(method: apiMethod.get, url: Constants.apiGetUserInfo + '?UID=$userId',accessToken: token);
+        if (token == null || userId == null || userId.isEmpty || userId == 'null') {
+          _showErrorDialog(
+            context,
+            'Authentication failed',
+            'Unable to load user details. Please try again.',
+          );
+          return;
+        }
+
+        final profileRes = await ApiServices.execute(
+          method: apiMethod.get,
+          url: '${Constants.apiGetUserInfo}?UID=$userId',
+          accessToken: token,
+        );
         if (profileRes != null) {
           UserProfileModel profile = UserProfileModel.fromJson(profileRes);
           await userRepository.storeUserProfile(profile);
         }
 
-        // 3. Navigate to Main App
         if (context.mounted) {
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const MainScreen()),
             (route) => false,
           );
         }
-      } else {
-        // Handle 400 or other errors
-        String errorMsg = response?.data['error_description'] ?? 'Please try again';
-        _showErrorDialog(context, 'Authentication failed!', errorMsg);
-      }
     } catch (e) {
-      _showErrorDialog(context, 'Error!', e.toString());
+      _showErrorDialog(
+        context,
+        'Authentication failed',
+        'Something went wrong. Please try again.',
+      );
     } finally {
       isLoading = false;
     }
+  }
+
+  bool _isLoginErrorResponse(Map response) {
+    final error = response['error'];
+    if (error != null) {
+      final text = error.toString().trim();
+      if (text.isNotEmpty && text != 'null') {
+        return true;
+      }
+    }
+
+    final token = response['access_token'];
+    return token == null || token.toString().isEmpty || token.toString() == 'null';
+  }
+
+  bool _hasValidAccessToken(LoginResponseModel response) {
+    final token = response.accessToken;
+    return token != null && token.isNotEmpty && token != 'null';
+  }
+
+  String _loginErrorMessage(dynamic response) {
+    if (response is Map) {
+      for (final key in [
+        'error_description',
+        'ErrorDescription',
+        'error',
+        'message',
+        'Message',
+      ]) {
+        final value = response[key];
+        if (value != null) {
+          final text = value.toString().trim();
+          if (text.isNotEmpty && text != 'null') {
+            if (key == 'error' &&
+                (text == 'invalid_grant' || text == 'invalid_client')) {
+              continue;
+            }
+            return text;
+          }
+        }
+      }
+    }
+    return 'Invalid username or password. Please try again.';
   }
 
   void _showErrorDialog(BuildContext context, String title, String message) {
@@ -109,10 +184,7 @@ class LoginProvider with ChangeNotifier {
       builder: (_) => InfoDialog(
         message: title,
         subtext: message,
-        ok: () {
-          Navigator.pop(context);
-          return true;
-        },
+        ok: () => Navigator.pop(context),
       ),
     );
   }

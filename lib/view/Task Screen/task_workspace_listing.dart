@@ -88,6 +88,7 @@ Widget build(BuildContext context) {
             return TaskWebViewWindows(
               key: ValueKey(_activeUrl ?? 'empty'),
               url: widget.suspendWebView ? null : _activeUrl,
+              onSubmissionSuccess: _handleTaskSubmissionSuccess,
             );
           }
         },
@@ -194,8 +195,6 @@ Widget _buildSelectAllHeader(TaskProvider provider) {
   //   );
   // }
 
-  // --- Navigation Logic ---
-
  void _handleERPWebRedirect(BuildContext context, TaskProvider provider, int index) {
   final task = provider.d365TaskList[index];
   if (task.notificationId != null) {
@@ -222,6 +221,20 @@ Future<void> _handleEmployeeWebRedirect(BuildContext context, TaskProvider provi
       const SnackBar(content: Text("Could not generate task link.")),
     );
   }
+}
+
+ void _handleTaskSubmissionSuccess() {
+  if (!mounted) return;
+  final provider = context.read<TaskProvider>();
+  if (_tabController.index == 0) {
+    provider.getd365TaskList();
+  } else {
+    provider.getTaskListPermission();
+  }
+  setState(() {
+    _activeUrl = null;
+    _selectedTask = null;
+  });
 }
 
   Widget _buildHeader(BuildContext context, TaskProvider provider) {
