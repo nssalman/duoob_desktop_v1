@@ -13,6 +13,14 @@ class MyRakpWorkspace extends StatelessWidget {
         key: const ValueKey(Constants.myRakpUrl),
         url: Constants.myRakpUrl,
         refreshUrlOnSuccess: true,
+        blockUiWhileLoading: false,
+        loadingTitle: 'Opening My RAKP',
+        loadingTips: const [
+          'Warming up your dashboard…',
+          'Pulling in the latest RAKP content…',
+          'Almost ready — setting things up…',
+          'Thanks for waiting…',
+        ],
       ),
     );
   }

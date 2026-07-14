@@ -3,6 +3,8 @@ import 'dart:developer';
 import 'dart:io';
 import 'package:duoob_desktop_app_v1/model/login_response_model.dart';
 import 'package:duoob_desktop_app_v1/model/user_profile_model.dart';
+import 'package:duoob_desktop_app_v1/services/api_services.dart';
+import 'package:duoob_desktop_app_v1/utils/constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // import 'api_query.dart';
@@ -660,6 +662,35 @@ class UserRepository {
     String userProfileJson = json.encode(userData);
     prefs.setString(USER_DETAILS, userProfileJson);
     print("The user preference is : ${await prefs.getString(USER_DETAILS)}");
+  }
+
+  Future<bool> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    final responseModel = await getLoginResponse();
+    final token = responseModel?.accessToken;
+    final userName = responseModel?.userName;
+    if (token == null || userName == null) return false;
+
+    final response = await ApiServices.execute(
+      method: apiMethod.post,
+      url: Constants.apiChangePassword,
+      accessToken: token,
+      isJson: true,
+      data: {
+        'OldPassword': oldPassword,
+        'Password': newPassword,
+        'UserName': userName,
+      },
+    );
+
+    if (response == null) return false;
+    if (response is Map &&
+        (response['error'] != null || response['error_description'] != null)) {
+      return false;
+    }
+    return true;
   }
 
   Future<UserProfileModel?> getUserProfileLocal() async {

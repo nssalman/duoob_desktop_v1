@@ -1,218 +1,71 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:duoob_desktop_app_v1/model/d365_task_model.dart';
+import 'package:duoob_desktop_app_v1/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:readmore/readmore.dart';
 
 class D365tasktile extends StatelessWidget {
   final D365TaskListModel task;
-  final Function()? onTapLink;
-  final Function(bool?) onChanged;
+  final VoidCallback? onTapLink;
+  final ValueChanged<bool?> onChanged;
   final bool isSelected;
-  const D365tasktile(
-      {Key? key,
-      required this.task,
-      this.onTapLink,
-      required this.onChanged,
-      this.isSelected = false})
-      : super(key: key);
+  final bool selectionMode;
+
+  const D365tasktile({
+    super.key,
+    required this.task,
+    this.onTapLink,
+    required this.onChanged,
+    this.isSelected = false,
+    this.selectionMode = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 0),
-      child: InkWell(
-        onTap: onTapLink,
-        child: Card(
-          shadowColor: Colors.blue.withValues(alpha: 0.3),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-            side: const BorderSide(color: Colors.blueGrey, width: 0.05),
-          ),
-          elevation: 3,
-          color: Colors.white,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              // border: Border.all(color: Colors.grey[300]!, width: 1)
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                                maxWidth:
-                                    MediaQuery.of(context).size.width * 0.5),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.blueGrey,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 5),
-                              child: Text(
-                                (task.subject != null)
-                                    ? task.subject.toString().contains(':')
-                                        ? task.subject
-                                            .toString()
-                                            .split(':')
-                                            .first
-                                            .split(' ')
-                                            .first
-                                        : task.subject.toString()
-                                    : task.notificationId != null
-                                        ? task.notificationId.toString()
-                                        : '',
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                          Spacer(),
-                          Icon(
-                            Icons.calendar_month,
-                            color: Colors.blueGrey,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            (task.createdDateTimeWorkItem != null)
-                                ? DateFormat('MMM dd,yyyy')
-                                    .format(task.createdDateTimeWorkItem!)
-                                : '',
-                            style: const TextStyle(
-                                color: Colors.black,
-                                fontSize: 14,
-                                fontWeight: FontWeight.normal),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(
-                        height: 5,
-                      ),
-                      if (task.amount != null)
-                        Row(
-                          children: [
-                            Text(
-                              'Amount : ',
-                              style: TextStyle(color: Colors.blueGrey),
-                            ),
-                            Expanded(
-                              child: AutoSizeText(
-                                task.amount.toStringAsFixed(2),
-                                maxFontSize: 14,
-                                minFontSize: 6,
-                                style: const TextStyle(
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                          ],
-                        ),
-                      // if (task.amount != null)
-                      //   const SizedBox(
-                      //     height: 5,
-                      //   ),
-                      Row(
-                        children: [
-                          if (onTapLink != null)
-                            Expanded(
-                              child: Text(
-                                ' ${task.description != null && extractRequester(task.description!).isNotEmpty ? ' By : ${extractRequester(task.description!)}' : '${extractDescription(task.subject.toString())}'}',
-                                // task.subject.toString(),
-                                style: const TextStyle(
-                                    color: Colors.blue,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          if (onTapLink == null)
-                            Expanded(
-                              child: Text(
-                                extractDescription(task.subject.toString()),
-                                // task.subject.toString(),
-                                style: const TextStyle(
-                                    color: Colors.blue,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          Checkbox(
-                            value: isSelected,
-                            onChanged: onChanged,
-                            materialTapTargetSize: MaterialTapTargetSize.padded,
-                            checkColor: Colors.white,
-                            activeColor: Colors.blue,
-                          ),
-                        ],
-                      ),
+    final borderColor = isSelected
+        ? AppColors.blue
+        : Colors.blueGrey.withValues(alpha: 0.2);
+    final backgroundColor =
+        isSelected ? AppColors.blue.withValues(alpha: 0.06) : Colors.white;
 
-                      // if (task.description != null &&
-                      //     extractRequester(task.description!).isNotEmpty)
-                      //   Row(
-                      //     crossAxisAlignment: CrossAxisAlignment.start,
-                      //     children: [
-                      //       Text(
-                      //         'Requester : ',
-                      //         style: AppTextStyles.blackHead
-                      //             .copyWith(color: Colors.blueGrey),
-                      //       ),
-                      //       Expanded(
-                      //           child: Text(extractRequester(task.description!),
-                      //               style: const TextStyle(
-                      //                 color: Colors.black,
-                      //                 fontSize: 14,
-                      //               ))),
-                      //     ],
-                      //   ),
-                      // if (task.description != null &&
-                      //     extractRequester(task.description!).isNotEmpty)
-                      //   const SizedBox(
-                      //     height: 5,
-                      //   ),
-                      if (task.description != null &&
-                          extractGeneralDescription(task.description!)
-                              .isNotEmpty)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Description : ',
-                              style: TextStyle(color: Colors.blueGrey),
-                            ),
-                            Expanded(
-                              child: ReadMoreText(
-                                extractGeneralDescription(task.description!),
-                                trimLines: 2,
-                                colorClickableText: Colors.blue,
-                                trimMode: TrimMode.Line,
-                                trimCollapsedText: '... Read more',
-                                trimExpandedText: ' Read less',
-                                style: TextStyle(fontSize: 14),
-                                moreStyle: TextStyle(
-                                    fontSize: 14, fontWeight: FontWeight.bold),
-                                lessStyle: TextStyle(
-                                    fontSize: 14, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: backgroundColor,
+        elevation: isSelected ? 2 : 1,
+        shadowColor: AppColors.blue.withValues(alpha: 0.2),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: borderColor,
+            width: isSelected ? 1.5 : 0.5,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: selectionMode ? () => onChanged(!isSelected) : onTapLink,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (selectionMode) ...[
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: onChanged,
+                    activeColor: AppColors.blue,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
                   ),
-                ),
+                  const SizedBox(width: 4),
+                ],
+                Expanded(child: _buildContent(context)),
+                if (!selectionMode && onTapLink != null)
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.grey.shade400,
+                  ),
               ],
             ),
           ),
@@ -221,8 +74,116 @@ class D365tasktile extends StatelessWidget {
     );
   }
 
+  Widget _buildContent(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Text(
+                  _badgeLabel(),
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const Spacer(),
+            Icon(Icons.calendar_month, color: Colors.blueGrey, size: 16),
+            const SizedBox(width: 4),
+            Text(
+              task.createdDateTimeWorkItem != null
+                  ? DateFormat('MMM dd, yyyy')
+                      .format(task.createdDateTimeWorkItem!)
+                  : '',
+              style: const TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+          ],
+        ),
+        if (task.amount != null) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text('Amount : ', style: TextStyle(color: Colors.blueGrey.shade400)),
+              Expanded(
+                child: AutoSizeText(
+                  task.amount.toStringAsFixed(2),
+                  maxFontSize: 14,
+                  minFontSize: 10,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          task.description != null &&
+                  extractRequester(task.description!).isNotEmpty
+              ? 'By : ${extractRequester(task.description!)}'
+              : extractDescription(task.subject.toString()),
+          style: const TextStyle(
+            color: Colors.blue,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        if (task.description != null &&
+            extractGeneralDescription(task.description!).isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Description : ', style: TextStyle(color: Colors.blueGrey.shade400)),
+              Expanded(
+                child: ReadMoreText(
+                  extractGeneralDescription(task.description!),
+                  trimLines: 2,
+                  colorClickableText: Colors.blue,
+                  trimMode: TrimMode.Line,
+                  trimCollapsedText: '... Read more',
+                  trimExpandedText: ' Read less',
+                  style: const TextStyle(fontSize: 14),
+                  moreStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  lessStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _badgeLabel() {
+    if (task.subject != null) {
+      final subject = task.subject.toString();
+      if (subject.contains(':')) {
+        return subject.split(':').first.split(' ').first;
+      }
+      return subject;
+    }
+    return task.notificationId ?? '';
+  }
+
   String extractDescription(String input) {
-    // This regex handles variations like "PR : RP-...", "PR No : RP-...", "SRN: RP-..."
     final pattern = RegExp(
       r'^(PR\s*(No)?\s*:?|SRN\s*:)\s*\S+\s*(/)?\s*',
       caseSensitive: false,
@@ -235,7 +196,6 @@ class D365tasktile extends StatelessWidget {
         RegExp(r'General description\s*:\s*(.*)', caseSensitive: false);
     final match = regex.firstMatch(input);
     if (match != null) {
-      // Capture the description line and everything that follows, until the next field (e.g., "ERP:", "Requester:", etc.)
       String rest = input.substring(match.start);
       final endRegex =
           RegExp(r'\r?\n\r?\n[A-Z][^:]{1,50}:\s*', multiLine: true);
@@ -244,13 +204,14 @@ class D365tasktile extends StatelessWidget {
         return rest
             .substring(0, endMatch.start)
             .replaceFirst(
-                RegExp(r'General description\s*:\s*', caseSensitive: false), '')
+                RegExp(r'General description\s*:\s*', caseSensitive: false),
+                '')
             .trim();
       } else {
-        // No ending field matched, so return everything after General description
         return rest
             .replaceFirst(
-                RegExp(r'General description\s*:\s*', caseSensitive: false), '')
+                RegExp(r'General description\s*:\s*', caseSensitive: false),
+                '')
             .trim();
       }
     }
@@ -261,7 +222,6 @@ class D365tasktile extends StatelessWidget {
     final regex = RegExp(r'Requester\s*:\s*(.*)', caseSensitive: false);
     final match = regex.firstMatch(input);
     if (match != null) {
-      // Capture the description line and everything that follows, until the next field (e.g., "ERP:", "Requester:", etc.)
       String rest = input.substring(match.start);
       final endRegex =
           RegExp(r'\r?\n\r?\n[A-Z][^:]{1,50}:\s*', multiLine: true);
@@ -272,7 +232,6 @@ class D365tasktile extends StatelessWidget {
             .replaceFirst(RegExp(r'Requester\s*:\s*', caseSensitive: false), '')
             .trim();
       } else {
-        // No ending field matched, so return everything after Requester
         return rest
             .replaceFirst(RegExp(r'Requester\s*:\s*', caseSensitive: false), '')
             .trim();

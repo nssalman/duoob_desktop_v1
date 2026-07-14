@@ -2,6 +2,7 @@ import 'package:duoob_desktop_app_v1/model/app_version_check_model.dart';
 import 'package:duoob_desktop_app_v1/services/app_version_service.dart';
 import 'package:duoob_desktop_app_v1/services/user_repository.dart';
 import 'package:duoob_desktop_app_v1/view/components/custom_dialogue.dart';
+import 'package:duoob_desktop_app_v1/view/components/interactive_loading_view.dart';
 import 'package:duoob_desktop_app_v1/view/components/update_required_screen.dart';
 import 'package:duoob_desktop_app_v1/view/login_screen.dart';
 import 'package:duoob_desktop_app_v1/view/main_screen.dart';
@@ -72,7 +73,14 @@ class _RootWrapperState extends State<RootWrapper> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: InteractiveLoadingView(
+          title: 'Starting Duoob',
+          tips: [
+            'Checking for updates…',
+            'Preparing your session…',
+            'Almost ready…',
+          ],
+        ),
       );
     }
 

@@ -2,6 +2,7 @@ import 'dart:developer';
 import 'package:duoob_desktop_app_v1/main.dart';
 import 'package:duoob_desktop_app_v1/services/download_services.dart';
 import 'package:duoob_desktop_app_v1/view/Task%20Screen/new_vindow_screen.dart';
+import 'package:duoob_desktop_app_v1/view/components/interactive_loading_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:lottie/lottie.dart';
@@ -12,12 +13,23 @@ enum TaskResult { none, success, failure }
 class TaskWebViewWindows extends StatefulWidget {
   final String? url;
   final bool refreshUrlOnSuccess;
+  final bool blockUiWhileLoading;
+  final String loadingTitle;
+  final List<String> loadingTips;
   final VoidCallback? onSubmissionSuccess;
 
   const TaskWebViewWindows({
     super.key,
     this.url,
     this.refreshUrlOnSuccess = false,
+    this.blockUiWhileLoading = true,
+    this.loadingTitle = 'Getting things ready',
+    this.loadingTips = const [
+      'Fetching the latest updates for you…',
+      'Almost there — polishing the view…',
+      'Hang tight, this won’t take long…',
+      'Loading your workspace…',
+    ],
     this.onSubmissionSuccess,
   });
 
@@ -28,6 +40,7 @@ class TaskWebViewWindows extends StatefulWidget {
 class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
+  bool _hasCompletedInitialLoad = false;
   bool _showSuccessAnimation = false;
   bool _canGoBack = false;
   bool _canGoForward = false;
@@ -240,7 +253,10 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                   },
                   onLoadStop: (controller, url) async {
                     log(url.toString(), name: 'onLoadStop');
-                    _safeSetState(() => _isLoading = false);
+                    _safeSetState(() {
+                      _isLoading = false;
+                      _hasCompletedInitialLoad = true;
+                    });
                     await _updateNavigationState();
 
                     final currentUrl = url.toString();
@@ -254,8 +270,12 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                     }
                   },
                   onProgressChanged: (controller, progress) {
-                    if (progress == 100)
-                      _safeSetState(() => _isLoading = false);
+                    if (progress == 100) {
+                      _safeSetState(() {
+                        _isLoading = false;
+                        _hasCompletedInitialLoad = true;
+                      });
+                    }
                   },
                   onReceivedError: (controller, request, error) {
                     if (request.url.toString() == "about:blank") return;
@@ -292,21 +312,32 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                 ),
               ),
 
-              // 1. Loading Indicator
-              if (_isLoading)
-                Container(
-                  color: Theme.of(context).colorScheme.surface,
-                  child: const Center(child: CircularProgressIndicator()),
+              // Loading: block only for first load (or when requested).
+              // After that, keep the page visible with a thin progress bar.
+              if (_isLoading &&
+                  (widget.blockUiWhileLoading || !_hasCompletedInitialLoad))
+                Positioned.fill(
+                  child: InteractiveLoadingView(
+                    title: widget.loadingTitle,
+                    tips: widget.loadingTips,
+                  ),
+                )
+              else if (_isLoading)
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: _SoftLoadingBar(),
                 ),
 
-              // 2. Success Overlay
+              // Success Overlay
               if (_currentResult == TaskResult.success)
                 _buildOverlay(
                   color: Colors.white,
                   asset: 'assets/animations/success.json',
                 ),
 
-              // 3. Failure Overlay
+              // Failure Overlay
               if (_currentResult == TaskResult.failure)
                 _buildOverlay(
                   color: Colors.white,
@@ -350,5 +381,99 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
         ],
       ),
     );
+  }
+}
+
+/// Thin indeterminate bar without Material CircularProgressIndicator.
+class _SoftLoadingBar extends StatefulWidget {
+  const _SoftLoadingBar();
+
+  @override
+  State<_SoftLoadingBar> createState() => _SoftLoadingBarState();
+}
+
+class _SoftLoadingBarState extends State<_SoftLoadingBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final trackColor = Theme.of(context).colorScheme.surfaceContainerHighest;
+    final barColor = Theme.of(context).colorScheme.primary;
+
+    return SizedBox(
+      height: 3,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final t = _controller.value;
+          return CustomPaint(
+            painter: _SoftBarPainter(
+              progress: t,
+              trackColor: trackColor,
+              barColor: barColor,
+            ),
+            size: Size.infinite,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SoftBarPainter extends CustomPainter {
+  _SoftBarPainter({
+    required this.progress,
+    required this.trackColor,
+    required this.barColor,
+  });
+
+  final double progress;
+  final Color trackColor;
+  final Color barColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final track = Paint()..color = trackColor;
+    canvas.drawRect(Offset.zero & size, track);
+
+    final barWidth = size.width * 0.35;
+    final start = (size.width + barWidth) * progress - barWidth;
+    final rect = Rect.fromLTWH(start, 0, barWidth, size.height);
+    final bar = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          barColor.withValues(alpha: 0.15),
+          barColor,
+          barColor.withValues(alpha: 0.15),
+        ],
+      ).createShader(rect);
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+      bar,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SoftBarPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.trackColor != trackColor ||
+        oldDelegate.barColor != barColor;
   }
 }

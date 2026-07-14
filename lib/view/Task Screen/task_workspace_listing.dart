@@ -7,6 +7,7 @@ import 'package:duoob_desktop_app_v1/model/task_model.dart';
 import 'package:duoob_desktop_app_v1/utils/colors.dart';
 import 'package:duoob_desktop_app_v1/utils/constants.dart';
 import 'package:duoob_desktop_app_v1/utils/size_config.dart';
+import 'package:duoob_desktop_app_v1/view/components/custom_dialogue.dart';
 import 'package:duoob_desktop_app_v1/view/components/d365_task_tile.dart';
 import 'package:duoob_desktop_app_v1/view/components/no_data_warning.dart';
 import 'package:duoob_desktop_app_v1/view/components/shimmer_loader.dart';
@@ -68,6 +69,14 @@ class _TaskWorkspaceState extends State<TaskWorkspace> with SingleTickerProvider
     if (!oldWidget.suspendWebView && widget.suspendWebView) {
       _activeUrl = null;
       _selectedTask = null;
+    }
+
+    // Refresh task lists whenever the user leaves and comes back to Tasks.
+    if (oldWidget.suspendWebView && !widget.suspendWebView) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<TaskProvider>().getTaskListPermission();
+      });
     }
   }
 
@@ -206,6 +215,24 @@ Widget _buildSelectAllHeader(TaskProvider provider) {
   }
 }
 
+void _openErpBulkUrl(String url) {
+  setState(() {
+    _activeUrl = url;
+  });
+}
+
+void _suspendBulkWebViewIfOpen() {
+  final isBulkOpen = _activeUrl?.contains(
+        'D365FnoWorkflowMultiSubmission',
+      ) ==
+      true;
+  if (!isBulkOpen) return;
+  setState(() {
+    _activeUrl = null;
+    _selectedTask = null;
+  });
+}
+
 // Handler for Employee Tasks (TaskModel)
 Future<void> _handleEmployeeWebRedirect(BuildContext context, TaskProvider provider, TaskModel task) async {
   // Use the provider logic you already wrote to get the one-time key and URL
@@ -226,6 +253,7 @@ Future<void> _handleEmployeeWebRedirect(BuildContext context, TaskProvider provi
  void _handleTaskSubmissionSuccess() {
   if (!mounted) return;
   final provider = context.read<TaskProvider>();
+  provider.clearSelection();
   if (_tabController.index == 0) {
     provider.getd365TaskList();
   } else {
@@ -283,6 +311,15 @@ Future<void> _handleEmployeeWebRedirect(BuildContext context, TaskProvider provi
   }
 
 
+  void _refreshActiveTab() {
+    final provider = context.read<TaskProvider>();
+    if (_tabController.index == 0) {
+      provider.getd365TaskList();
+    } else {
+      provider.getTaskListPermission();
+    }
+  }
+
 Widget _buildGlassmorphicTabBar() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -304,10 +341,12 @@ Widget _buildGlassmorphicTabBar() {
                 return Expanded(
                   child: InkWell(
                     onTap: () {
+                      if (_tabController.index == tabIndex) return;
                       setState(() {
                         _tabController.index = tabIndex;
                       });
                       _tabController.animateTo(tabIndex);
+                      _refreshActiveTab();
                     },
                     child: AnimatedContainer(
                       duration: Duration(milliseconds: 200),
@@ -360,16 +399,82 @@ class ERPTaskListSection extends StatefulWidget {
   State<ERPTaskListSection> createState() => _ERPTaskListSectionState();
 }
 
-class _ERPTaskListSectionState extends State<ERPTaskListSection> with AutomaticKeepAliveClientMixin {
+class _ERPTaskListSectionState extends State<ERPTaskListSection>
+    with AutomaticKeepAliveClientMixin {
+  bool _selectionMode = false;
+
   @override
-  bool get wantKeepAlive => true; // Prevents the list from disposing
+  bool get wantKeepAlive => true;
+
+  void _enterSelectionMode() => setState(() => _selectionMode = true);
+
+  void _exitSelectionMode(TaskProvider provider) {
+    provider.clearSelection();
+    setState(() => _selectionMode = false);
+    context
+        .findAncestorStateOfType<_TaskWorkspaceState>()
+        ?._suspendBulkWebViewIfOpen();
+  }
+
+  void _onSelectionChanged(
+    TaskProvider provider,
+    VoidCallback changeSelection,
+  ) {
+    changeSelection();
+    context
+        .findAncestorStateOfType<_TaskWorkspaceState>()
+        ?._suspendBulkWebViewIfOpen();
+  }
+
+  Future<void> _confirmBulkAction(
+    BuildContext context,
+    TaskProvider provider, {
+    required bool isApprove,
+  }) async {
+    final ids =
+        D365TaskListModel.getSelectedNotificationIds(provider.d365TaskList);
+    if (ids.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select any work items!')),
+      );
+      return;
+    }
+
+    final action = isApprove ? 'approve' : 'reject';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => CustomDialog(
+        icon: isApprove ? Icons.check_circle_outline : Icons.cancel_outlined,
+        destructive: !isApprove,
+        title: isApprove ? 'Approve selected tasks?' : 'Reject selected tasks?',
+        subtitle:
+            'You are about to $action ${ids.length} item${ids.length == 1 ? '' : 's'}. This will open the submission page.',
+        yesTitle: isApprove ? 'Approve' : 'Reject',
+        noTitle: 'Cancel',
+        yes: () => Navigator.pop(context, true),
+        no: () => Navigator.pop(context, false),
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final urlAction = isApprove ? 'Approve' : 'Reject';
+    final url =
+        'https://rakp.rpsmart.com/d365emailnotifications/D365FnoWorkflowMultiSubmission.aspx?NotificationId=${ids.join(',')}&Action=$urlAction';
+
+    context
+        .findAncestorStateOfType<_TaskWorkspaceState>()
+        ?._openErpBulkUrl(url);
+  }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required for KeepAlive
+    super.build(context);
     return Consumer<TaskProvider>(
       builder: (context, provider, child) {
-        if (provider.isDD365Loading) return const ShimmerLoader(title: 'ERP Task');
+        if (provider.isDD365Loading) {
+          return const ShimmerLoader(title: 'ERP Task');
+        }
 
         if (provider.d365TaskList.isEmpty) {
           return NoDataWarning(
@@ -378,23 +483,282 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection> with AutomaticK
           );
         }
 
-        return RefreshIndicator(
-          onRefresh: () => provider.getd365TaskList(),
-          child: ListView.builder(
-            key: const PageStorageKey('erp_list'), // Helps preserve scroll position
-            padding: const EdgeInsets.only(bottom: 120),
-            itemCount: provider.d365TaskList.length,
-            itemBuilder: (context, index) {
-              final task = provider.d365TaskList[index];
-              return D365tasktile(
-                task: task,
-                onChanged: (value) => provider.toggleSelection(index),
-                onTapLink: () => context.findAncestorStateOfType<_TaskWorkspaceState>()?._handleERPWebRedirect(context, provider, index),
-              );
-            },
-          ),
+        final hasSelection = provider.checkForSelection();
+        final selectedCount = provider.d365TaskList
+            .where((task) => task.isSelected)
+            .length;
+        final showSelectionUi = _selectionMode || hasSelection;
+
+        return Column(
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: showSelectionUi
+                  ? _ErpSelectionBar(
+                      key: const ValueKey('selection-bar'),
+                      selectedCount: selectedCount,
+                      totalCount: provider.d365TaskList.length,
+                      isAllSelected: provider.isAllSelect,
+                      onSelectAll: () => _onSelectionChanged(
+                        provider,
+                        provider.selectAll,
+                      ),
+                      onClear: () => _exitSelectionMode(provider),
+                      onToggleAll: () => _onSelectionChanged(
+                        provider,
+                        provider.isAllSelect
+                            ? provider.clearSelection
+                            : provider.selectAll,
+                      ),
+                    )
+                  : _ErpSelectPrompt(
+                      key: const ValueKey('select-prompt'),
+                      onStart: _enterSelectionMode,
+                    ),
+            ),
+            Expanded(
+              child: Stack(
+                children: [
+                  RefreshIndicator(
+                    onRefresh: () => provider.getd365TaskList(),
+                    child: ListView.builder(
+                      key: const PageStorageKey('erp_list'),
+                      padding: EdgeInsets.only(
+                        top: 4,
+                        bottom: hasSelection ? 76 : 16,
+                      ),
+                      itemCount: provider.d365TaskList.length,
+                      itemBuilder: (context, index) {
+                        final task = provider.d365TaskList[index];
+                        return D365tasktile(
+                          task: task,
+                          isSelected: task.isSelected,
+                          selectionMode: showSelectionUi,
+                          onChanged: (_) {
+                            if (!_selectionMode) _enterSelectionMode();
+                            _onSelectionChanged(
+                              provider,
+                              () => provider.toggleSelection(index),
+                            );
+                          },
+                          onTapLink: showSelectionUi
+                              ? null
+                              : () => context
+                                  .findAncestorStateOfType<
+                                      _TaskWorkspaceState>()
+                                  ?._handleERPWebRedirect(
+                                      context, provider, index),
+                        );
+                      },
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: AnimatedSlide(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      offset:
+                          hasSelection ? Offset.zero : const Offset(0, 1.2),
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 180),
+                        opacity: hasSelection ? 1 : 0,
+                        child: IgnorePointer(
+                          ignoring: !hasSelection,
+                          child: _ErpBulkActionBar(
+                            selectedCount: selectedCount,
+                            onApprove: () => _confirmBulkAction(
+                              context,
+                              provider,
+                              isApprove: true,
+                            ),
+                            onReject: () => _confirmBulkAction(
+                              context,
+                              provider,
+                              isApprove: false,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         );
       },
+    );
+  }
+}
+
+class _ErpSelectPrompt extends StatelessWidget {
+  const _ErpSelectPrompt({super.key, required this.onStart});
+
+  final VoidCallback onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: OutlinedButton.icon(
+          onPressed: onStart,
+          icon: const Icon(Icons.checklist_rounded, size: 18),
+          label: const Text('Select items for bulk action'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.blue,
+            side: BorderSide(color: AppColors.blue.withValues(alpha: 0.35)),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErpSelectionBar extends StatelessWidget {
+  const _ErpSelectionBar({
+    super.key,
+    required this.selectedCount,
+    required this.totalCount,
+    required this.isAllSelected,
+    required this.onSelectAll,
+    required this.onClear,
+    required this.onToggleAll,
+  });
+
+  final int selectedCount;
+  final int totalCount;
+  final bool isAllSelected;
+  final VoidCallback onSelectAll;
+  final VoidCallback onClear;
+  final VoidCallback onToggleAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.blue.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.blue.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.blue,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '$selectedCount selected',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: isAllSelected ? onToggleAll : onSelectAll,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.blue,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: Text(isAllSelected ? 'Deselect all' : 'Select all ($totalCount)'),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: onClear,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.iconGrey,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErpBulkActionBar extends StatelessWidget {
+  const _ErpBulkActionBar({
+    required this.selectedCount,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final int selectedCount;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0),
+            Theme.of(context).colorScheme.surface,
+          ],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+        child: Material(
+          elevation: 10,
+          shadowColor: Colors.black26,
+          borderRadius: BorderRadius.circular(14),
+          color: Theme.of(context).colorScheme.surface,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: onApprove,
+                    icon: const Icon(Icons.check_rounded, size: 18),
+                    label: Text('Approve ($selectedCount)'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.green.withValues(alpha: 0.15),
+                      foregroundColor: AppColors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: onReject,
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    label: Text('Reject ($selectedCount)'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor:
+                          AppColors.finalRed.withValues(alpha: 0.12),
+                      foregroundColor: AppColors.finalRed,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
