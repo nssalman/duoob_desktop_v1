@@ -122,6 +122,8 @@ class CopilotBackendApi {
 
     log(response.body);
 
+    log(response.body, name: 'CopilotBackendApi');
+
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
         'Failed to fetch Direct Line token. '
@@ -202,6 +204,17 @@ class DirectLineClient {
   bool _disposed = false;
   final Set<String> _seenActivityIds = <String>{};
 
+  static const _legacyUserId = 'dl_test_user';
+  /// Direct Line user id expected by the production Copilot / backend mapping.
+  static const _directLineUserId = _legacyUserId;
+
+  bool _isLocalUser(String? fromId) {
+    if (fromId == null || fromId.isEmpty) return false;
+    return fromId == _userId ||
+        fromId == _directLineUserId ||
+        fromId == _legacyUserId;
+  }
+
   Future<void> start(BackendDirectLineToken backendToken) async {
     _userId = backendToken.userId;
     _currentToken = backendToken.token;
@@ -236,8 +249,8 @@ class DirectLineClient {
       'textFormat': 'plain',
       'locale': locale,
       'from': {
-        'id': _userId,
-        'name': _userId,
+        'id': _directLineUserId,
+        'name': 'IT Account',
       },
     });
   }
@@ -440,7 +453,7 @@ class DirectLineClient {
                   'token': appAccessToken,
                 },
                 'from': {
-                  'id': 'dl_test_user',
+                  'id': _directLineUserId,
                   'name': 'IT Account',
                 },
               }));
@@ -471,8 +484,8 @@ class DirectLineClient {
       final from = activity['from'] as Map<String, dynamic>? ?? const {};
       final fromId = from['id'] as String?;
 
-      // Skip echoes of the user's own messages (already shown optimistically).
-      if (fromId == _userId || fromId == 'dl_test_user') {
+      // Skip echoes of messages we already show optimistically in the UI.
+      if (_isLocalUser(fromId)) {
         continue;
       }
 
