@@ -1,4 +1,4 @@
-import 'package:duoob_desktop_app_v1/utils/colors.dart';
+import 'package:duoob_desktop_app_v1/utils/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -10,13 +10,15 @@ class ShimmerLoader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+
     return ListView.separated(
       itemCount: 5,
       padding: EdgeInsets.zero,
       itemBuilder: (context, index) {
         return Shimmer.fromColors(
-          baseColor: AppColors.lightGrey.withValues(alpha: 0.3),
-          highlightColor: Colors.white70,
+          baseColor: c.shimmerBase,
+          highlightColor: c.shimmerHighlight,
           child: Card(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

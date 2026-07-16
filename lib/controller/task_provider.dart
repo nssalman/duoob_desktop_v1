@@ -428,7 +428,7 @@ class TaskProvider with ChangeNotifier {
     var response = await ApiServices.execute(
       method: apiMethod.get,
       accessToken: token,
-      url: '${Constants.apiGetD365Task}?usersid=userId',
+      url: '${Constants.apiGetD365Task}?usersid=$userId',
     );
 
     // 3. Parse and Store Data

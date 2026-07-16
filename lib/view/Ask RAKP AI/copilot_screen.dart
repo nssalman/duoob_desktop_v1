@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:ui';
 
 import 'package:duoob_desktop_app_v1/utils/colors.dart';
+import 'package:duoob_desktop_app_v1/utils/theme_colors.dart';
 import 'package:duoob_desktop_app_v1/view/components/modern_loading_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +17,13 @@ const _kDirectLineBaseUrl =
     'https://europe.directline.botframework.com/v3/directline';
 
 const _thinkingIndicatorText = 'Thinking';
+
+const _starterPrompts = [
+  'What can you help me with?',
+  'HR policy questions',
+  'IT support guidance',
+  'Leave and attendance info',
+];
 
 int _parseExpiresIn(Map<String, dynamic> json) {
   final val = json['expires_in'] ?? json['expiresIn'];
@@ -749,6 +758,7 @@ class _CopilotChatPageState extends State<CopilotChatPage>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
+        final c = context.colors;
         final chatBody = _buildChatBody(context);
 
         if (widget.embedded) {
@@ -761,14 +771,14 @@ class _CopilotChatPageState extends State<CopilotChatPage>
             appBar: AppBar(
               title: Text(
                 widget.title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: c.onBrand,
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              backgroundColor: AppColors.blue,
-              iconTheme: const IconThemeData(color: Colors.white),
+              backgroundColor: c.brand,
+              iconTheme: IconThemeData(color: c.onBrand),
             ),
             body: chatBody,
           ),
@@ -778,42 +788,84 @@ class _CopilotChatPageState extends State<CopilotChatPage>
   }
 
   Widget _buildChatBody(BuildContext context) {
+    final c = context.colors;
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
-      child: Column(
-        children: [
-          if (_controller.errorMessage != null)
-            MaterialBanner(
-              content: Text(_controller.errorMessage!),
-              actions: [
-                TextButton(
-                  onPressed: _controller.isInitializing
-                      ? null
-                      : () => unawaited(_controller.reinitialize()),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          Expanded(
-            child: _controller.isInitializing
-                ? const Center(child: ModernLoadingIndicator())
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _controller.messages.length,
-                    itemBuilder: (context, index) {
-                      final message = _controller.messages[index];
-                      return _ChatBubble(
-                        message: message,
-                        onUseInInput: _useMessageInInput,
-                      );
-                    },
-                  ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              c.surfaceMuted,
+              Theme.of(context).colorScheme.surface,
+            ],
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        ),
+        child: Column(
+          children: [
+            if (_controller.errorMessage != null)
+              _CopilotErrorBanner(
+                message: _controller.errorMessage!,
+                onRetry: _controller.isInitializing
+                    ? null
+                    : () => unawaited(_controller.reinitialize()),
+              ),
+            Expanded(
+              child: _controller.isInitializing
+                  ? const Center(child: ModernLoadingIndicator())
+                  : _controller.messages.isEmpty
+                      ? _CopilotWelcome(
+                          prompts: _starterPrompts,
+                          onPromptTap: _sendSuggestion,
+                        )
+                      : ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                          itemCount: _controller.messages.length,
+                          itemBuilder: (context, index) {
+                            final message = _controller.messages[index];
+                            return _ChatBubble(
+                              message: message,
+                              onUseInInput: _useMessageInInput,
+                            );
+                          },
+                        ),
+            ),
+            _buildInputBar(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputBar(BuildContext context) {
+    final c = context.colors;
+    final canSend =
+        !_controller.isInitializing && !_controller.isSending;
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+              decoration: BoxDecoration(
+                color: c.cardFill.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: c.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: c.shadow,
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -825,57 +877,67 @@ class _CopilotChatPageState extends State<CopilotChatPage>
                       maxLines: 5,
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _handleSend(),
-                      style: const TextStyle(color: Colors.black),
-                      cursorColor: AppColors.black,
+                      style: TextStyle(
+                        color: c.textPrimary,
+                        fontSize: 14.5,
+                      ),
+                      cursorColor: c.brand,
                       decoration: InputDecoration(
-                        hintText: 'Ask Copilot something...',
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(
-                            color: AppColors.black,
-                            width: 1.5,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
+                        hintText: 'Ask anything about RAKP…',
+                        hintStyle: TextStyle(
+                          color: c.textMuted,
+                          fontSize: 14.5,
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: const BorderSide(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(20),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 10,
                         ),
-                        border: OutlineInputBorder(
-                          borderSide: const BorderSide(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
+                        isDense: true,
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  IconButton.filled(
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.blue,
-                      shape: const CircleBorder(),
-                      minimumSize: const Size(48, 48),
+                  Material(
+                    color: canSend ? c.brand : c.iconMuted,
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: canSend ? _handleSend : null,
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Center(
+                          child: _controller.isSending
+                              ? ModernLoadingIndicator(
+                                  color: c.onBrand,
+                                  compact: true,
+                                  dotSize: 6,
+                                  spacing: 4,
+                                )
+                              : Icon(
+                                  Icons.arrow_upward_rounded,
+                                  color: c.onBrand,
+                                  size: 22,
+                                ),
+                        ),
+                      ),
                     ),
-                    onPressed: _controller.isInitializing || _controller.isSending
-                        ? null
-                        : _handleSend,
-                    icon: _controller.isSending
-                        ? const ModernLoadingIndicator(
-                            color: Colors.white,
-                            compact: true,
-                            dotSize: 6,
-                            spacing: 4,
-                          )
-                        : const Icon(
-                            Icons.send_outlined,
-                            color: Colors.white,
-                          ),
                   ),
                 ],
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
+  }
+
+  void _sendSuggestion(String text) {
+    if (_controller.isInitializing || _controller.isSending) return;
+    unawaited(_controller.sendMessage(text));
   }
 
   void _useMessageInInput(String text) {
@@ -909,6 +971,169 @@ class _CopilotChatPageState extends State<CopilotChatPage>
   }
 }
 
+class _CopilotErrorBanner extends StatelessWidget {
+  const _CopilotErrorBanner({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.finalRed.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.finalRed.withValues(alpha: 0.2),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppColors.finalRed,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.finalRed,
+                  height: 1.3,
+                ),
+              ),
+            ),
+            if (onRetry != null)
+              TextButton(
+                onPressed: onRetry,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.finalRed,
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Text('Retry'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CopilotWelcome extends StatelessWidget {
+  const _CopilotWelcome({
+    required this.prompts,
+    required this.onPromptTap,
+  });
+
+  final List<String> prompts;
+  final ValueChanged<String> onPromptTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(28),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: c.brandSoft,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 36,
+                  color: c.brand,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'How can I help today?',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Ask about policies, HR, IT support, or workplace processes.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: c.textMuted,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: prompts.map((prompt) {
+                  return ActionChip(
+                    label: Text(prompt),
+                    onPressed: () => onPromptTap(prompt),
+                    backgroundColor: c.cardFill,
+                    side: BorderSide(color: c.border),
+                    labelStyle: TextStyle(
+                      color: c.brand,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatAvatar extends StatelessWidget {
+  const _ChatAvatar({required this.isUser});
+
+  final bool isUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: isUser ? c.brandSoft : c.brand,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(
+        isUser ? Icons.person_outline_rounded : Icons.auto_awesome_rounded,
+        size: 18,
+        color: isUser ? c.brand : c.onBrand,
+      ),
+    );
+  }
+}
+
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble({
     required this.message,
@@ -931,51 +1156,98 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final bool isUser = message.author == ChatAuthor.user;
     final bool isSystem = message.author == ChatAuthor.system;
 
     if (isSystem) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 14, left: 42),
+        child: Align(
+          alignment: Alignment.centerLeft,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade300),
+              color: c.chatBotBubble,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: c.border),
+              boxShadow: [
+                BoxShadow(
+                  color: c.shadow,
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
             child: ModernLoadingIndicator(
               label: _thinkingIndicatorText,
-              color: AppColors.blue.withValues(alpha: 0.85),
+              color: c.loading,
             ),
           ),
         ),
       );
     }
 
-    final Color bubbleColor = isUser
-        ? AppColors.blue
-        : Colors.grey.shade200;
+    final maxBubbleWidth = MediaQuery.sizeOf(context).width * 0.62;
 
-    final Color textColor = isUser ? Colors.white : Colors.black87;
-    final Color actionColor =
-        isUser ? Colors.white.withValues(alpha: 0.92) : AppColors.blue;
-    final maxBubbleWidth = MediaQuery.sizeOf(context).width * 0.55;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!isUser) ...[
+            const _ChatAvatar(isUser: false),
+            const SizedBox(width: 10),
+          ],
+          Flexible(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: maxBubbleWidth.clamp(280, 720),
+              ),
+              child: _buildMessageCard(context, isUser: isUser),
+            ),
+          ),
+          if (isUser) ...[
+            const SizedBox(width: 10),
+            const _ChatAvatar(isUser: true),
+          ],
+        ],
+      ),
+    );
+  }
 
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: maxBubbleWidth.clamp(280, 720),
+  Widget _buildMessageCard(BuildContext context, {required bool isUser}) {
+    final c = context.colors;
+    final textColor = isUser ? c.onBrand : c.textPrimary;
+    final actionColor =
+        isUser ? c.onBrand.withValues(alpha: 0.92) : c.brand;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isUser ? c.chatUserBubble : c.chatBotBubble,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(16),
+          topRight: const Radius.circular(16),
+          bottomLeft: Radius.circular(isUser ? 16 : 6),
+          bottomRight: Radius.circular(isUser ? 6 : 16),
         ),
-        margin: const EdgeInsets.only(bottom: 12),
+        border: isUser
+            ? null
+            : Border.all(color: c.border),
+        boxShadow: [
+          BoxShadow(
+            color: isUser
+                ? c.brand.withValues(alpha: 0.22)
+                : Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 6),
-        decoration: BoxDecoration(
-          color: bubbleColor,
-          borderRadius: BorderRadius.circular(16),
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -984,10 +1256,15 @@ class _ChatBubble extends StatelessWidget {
                 data: message.text,
                 selectable: true,
                 styleSheet: MarkdownStyleSheet(
-                  p: TextStyle(color: textColor, fontSize: 16),
+                  p: TextStyle(
+                    color: textColor,
+                    fontSize: 14.5,
+                    height: 1.45,
+                  ),
                   a: TextStyle(
-                    color: isUser ? Colors.white : Colors.blue.shade700,
+                    color: isUser ? c.onBrand : c.brand,
                     decoration: TextDecoration.underline,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 onTapLink: (text, href, title) async {

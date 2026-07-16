@@ -1,4 +1,4 @@
-import 'package:duoob_desktop_app_v1/utils/colors.dart';
+import 'package:duoob_desktop_app_v1/utils/theme_colors.dart';
 import 'package:flutter/material.dart';
 
 class ModernLoadingIndicator extends StatefulWidget {
@@ -44,8 +44,10 @@ class _ModernLoadingIndicatorState extends State<ModernLoadingIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.color ?? AppColors.blue;
+    final c = context.colors;
+    final color = widget.color ?? c.loading;
     final dotSize = widget.compact ? widget.dotSize * 0.75 : widget.dotSize;
+    final minOpacity = c.isDark ? 0.6 : 0.35;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -64,7 +66,7 @@ class _ModernLoadingIndicatorState extends State<ModernLoadingIndicator>
                 return Transform.translate(
                   offset: Offset(0, -bounce * (widget.compact ? 3 : 5)),
                   child: Opacity(
-                    opacity: 0.35 + (bounce * 0.65),
+                    opacity: minOpacity + (bounce * (1 - minOpacity)),
                     child: child,
                   ),
                 );
@@ -86,7 +88,7 @@ class _ModernLoadingIndicatorState extends State<ModernLoadingIndicator>
             widget.label!,
             style: widget.labelStyle ??
                 TextStyle(
-                  color: Colors.grey.shade700,
+                  color: context.colors.textMuted,
                   fontSize: widget.compact ? 13 : 14,
                   fontWeight: FontWeight.w500,
                 ),

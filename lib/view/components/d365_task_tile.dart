@@ -1,6 +1,7 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:duoob_desktop_app_v1/model/d365_task_model.dart';
 import 'package:duoob_desktop_app_v1/utils/colors.dart';
+import 'package:duoob_desktop_app_v1/utils/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:readmore/readmore.dart';
@@ -11,6 +12,7 @@ class D365tasktile extends StatelessWidget {
   final ValueChanged<bool?> onChanged;
   final bool isSelected;
   final bool selectionMode;
+  final bool isActive;
 
   const D365tasktile({
     super.key,
@@ -19,55 +21,88 @@ class D365tasktile extends StatelessWidget {
     required this.onChanged,
     this.isSelected = false,
     this.selectionMode = false,
+    this.isActive = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+    final highlighted = isSelected || isActive;
     final borderColor = isSelected
-        ? AppColors.blue
-        : Colors.blueGrey.withValues(alpha: 0.2);
-    final backgroundColor =
-        isSelected ? AppColors.blue.withValues(alpha: 0.06) : Colors.white;
+        ? c.brand
+        : isActive
+            ? c.brand.withValues(alpha: 0.45)
+            : c.border;
+    final backgroundColor = isSelected
+        ? c.brand.withValues(alpha: 0.07)
+        : c.cardFill;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: backgroundColor,
-        elevation: isSelected ? 2 : 1,
-        shadowColor: AppColors.blue.withValues(alpha: 0.2),
+        elevation: highlighted ? 2 : 0,
+        shadowColor: c.shadow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
             color: borderColor,
-            width: isSelected ? 1.5 : 0.5,
+            width: highlighted ? 1.4 : 1,
           ),
         ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
           onTap: selectionMode ? () => onChanged(!isSelected) : onTapLink,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (selectionMode) ...[
-                  Checkbox(
-                    value: isSelected,
-                    onChanged: onChanged,
-                    activeColor: AppColors.blue,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                  ),
+          child: Stack(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
                   const SizedBox(width: 4),
-                ],
-                Expanded(child: _buildContent(context)),
-                if (!selectionMode && onTapLink != null)
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: Colors.grey.shade400,
+                  if (selectionMode) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Checkbox(
+                        value: isSelected,
+                        onChanged: onChanged,
+                        activeColor: c.brand,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ],
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        selectionMode ? 4 : 12,
+                        12,
+                        10,
+                        12,
+                      ),
+                      child: _buildContent(context),
+                    ),
                   ),
-              ],
-            ),
+                  if (!selectionMode)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Icon(
+                        Icons.chevron_right_rounded,
+                        color: highlighted ? c.brand : c.iconMuted,
+                      ),
+                    ),
+                ],
+              ),
+              if (highlighted)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 4,
+                    color: c.brand,
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -75,101 +110,100 @@ class D365tasktile extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context) {
+    final c = context.colors;
+    final requester = task.description != null
+        ? extractRequester(task.description!)
+        : '';
+    final description = task.description != null
+        ? extractGeneralDescription(task.description!)
+        : '';
+    final title = requester.isNotEmpty
+        ? requester
+        : extractDescription(task.subject?.toString() ?? '');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Flexible(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.blueGrey,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                child: Text(
-                  _badgeLabel(),
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              child: _Chip(
+                label: _badgeLabel(),
+                background: c.brand,
+                foreground: c.onBrand,
               ),
             ),
+            const SizedBox(width: 8),
+            if (task.amount != null)
+              _Chip(
+                label: _formatAmount(task.amount),
+                background: AppColors.green.withValues(alpha: 0.12),
+                foreground: AppColors.green,
+                icon: Icons.payments_outlined,
+              ),
             const Spacer(),
-            Icon(Icons.calendar_month, color: Colors.blueGrey, size: 16),
+            Icon(Icons.schedule_rounded, size: 14, color: c.iconMuted),
             const SizedBox(width: 4),
             Text(
               task.createdDateTimeWorkItem != null
                   ? DateFormat('MMM dd, yyyy')
                       .format(task.createdDateTimeWorkItem!)
-                  : '',
-              style: const TextStyle(fontSize: 13, color: Colors.black87),
+                  : '—',
+              style: TextStyle(
+                fontSize: 12,
+                color: c.textMuted,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
-        if (task.amount != null) ...[
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Text('Amount : ', style: TextStyle(color: Colors.blueGrey.shade400)),
-              Expanded(
-                child: AutoSizeText(
-                  task.amount.toStringAsFixed(2),
-                  maxFontSize: 14,
-                  minFontSize: 10,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
-          task.description != null &&
-                  extractRequester(task.description!).isNotEmpty
-              ? 'By : ${extractRequester(task.description!)}'
-              : extractDescription(task.subject.toString()),
-          style: const TextStyle(
-            color: Colors.blue,
+          title.isEmpty ? 'ERP workflow item' : title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: c.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w600,
+            height: 1.25,
           ),
         ),
-        if (task.description != null &&
-            extractGeneralDescription(task.description!).isNotEmpty) ...[
+        if (description.isNotEmpty) ...[
           const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Description : ', style: TextStyle(color: Colors.blueGrey.shade400)),
-              Expanded(
-                child: ReadMoreText(
-                  extractGeneralDescription(task.description!),
-                  trimLines: 2,
-                  colorClickableText: Colors.blue,
-                  trimMode: TrimMode.Line,
-                  trimCollapsedText: '... Read more',
-                  trimExpandedText: ' Read less',
-                  style: const TextStyle(fontSize: 14),
-                  moreStyle: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  lessStyle: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+          ReadMoreText(
+            description,
+            trimLines: 2,
+            colorClickableText: c.brand,
+            trimMode: TrimMode.Line,
+            trimCollapsedText: ' more',
+            trimExpandedText: ' less',
+            style: TextStyle(
+              fontSize: 12.5,
+              color: c.textMuted,
+              height: 1.35,
+            ),
+            moreStyle: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: c.brand,
+            ),
+            lessStyle: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: c.brand,
+            ),
           ),
         ],
       ],
     );
+  }
+
+  String _formatAmount(dynamic amount) {
+    if (amount is num) {
+      return NumberFormat.currency(symbol: '', decimalDigits: 2).format(amount);
+    }
+    return amount.toString();
   }
 
   String _badgeLabel() {
@@ -180,7 +214,7 @@ class D365tasktile extends StatelessWidget {
       }
       return subject;
     }
-    return task.notificationId ?? '';
+    return task.notificationId ?? 'ERP';
   }
 
   String extractDescription(String input) {
@@ -238,5 +272,53 @@ class D365tasktile extends StatelessWidget {
       }
     }
     return '';
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({
+    required this.label,
+    required this.background,
+    required this.foreground,
+    this.icon,
+  });
+
+  final String label;
+  final Color background;
+  final Color foreground;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 140),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: foreground),
+            const SizedBox(width: 4),
+          ],
+          Flexible(
+            child: AutoSizeText(
+              label,
+              maxLines: 1,
+              minFontSize: 9,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: foreground,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

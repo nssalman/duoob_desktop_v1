@@ -30,10 +30,14 @@ void main() async{
         settings: WebViewEnvironmentSettings(userDataFolder: webViewDataPath)
     );
   }
+
+  final themeProvider = ThemeProvider();
+  await themeProvider.loadTheme();
+
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider.value(value: themeProvider),
         ChangeNotifierProvider(create: (_) => LoginProvider()), 
         ChangeNotifierProvider(create: (_) => TaskProvider()), 
       ],

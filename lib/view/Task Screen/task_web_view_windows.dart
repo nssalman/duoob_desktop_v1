@@ -121,39 +121,60 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
 
   Widget _buildNavigationBar(BuildContext context) {
     return Material(
-      elevation: 1,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Row(
-          children: [
-            IconButton(
-              tooltip: 'Back',
-              onPressed: _canGoBack ? _goBack : null,
-              icon: const Icon(Icons.arrow_back),
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest
+          .withValues(alpha: 0.65),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Theme.of(context).dividerColor.withValues(alpha: 0.7),
             ),
-            IconButton(
-              tooltip: 'Forward',
-              onPressed: _canGoForward ? _goForward : null,
-              icon: const Icon(Icons.arrow_forward),
-            ),
-            IconButton(
-              tooltip: 'Reload',
-              onPressed: _isLoading ? null : _reloadPage,
-              icon: const Icon(Icons.refresh),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _activeUrl ?? '',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Back',
+                onPressed: _canGoBack ? _goBack : null,
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              IconButton(
+                tooltip: 'Forward',
+                onPressed: _canGoForward ? _goForward : null,
+                icon: const Icon(Icons.arrow_forward_rounded),
+              ),
+              IconButton(
+                tooltip: 'Reload',
+                onPressed: _isLoading ? null : _reloadPage,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Theme.of(context).dividerColor.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  child: Text(
+                    _activeUrl ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -362,23 +383,60 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.touch_app_outlined,
-            size: 64,
-            color: Theme.of(context).disabledColor,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Theme.of(context).colorScheme.surface,
+            Theme.of(context).colorScheme.surfaceContainerHighest
+                .withValues(alpha: 0.35),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.open_in_browser_rounded,
+                  size: 40,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Task workspace',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Select a task from the list to open its workflow details here.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Select a task to view details',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: Theme.of(context).disabledColor,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

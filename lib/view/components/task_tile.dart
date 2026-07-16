@@ -1,143 +1,165 @@
 import 'package:duoob_desktop_app_v1/model/task_model.dart';
-import 'package:duoob_desktop_app_v1/utils/colors.dart';
+import 'package:duoob_desktop_app_v1/utils/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class TaskTile extends StatelessWidget {
   final TaskModel task;
-  final Function() onPressed;
-  const TaskTile({Key? key, required this.task, required this.onPressed})
-      : super(key: key);
+  final VoidCallback onPressed;
+  final bool isActive;
+
+  const TaskTile({
+    super.key,
+    required this.task,
+    required this.onPressed,
+    this.isActive = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 0),
-      child: InkWell(
-        onTap: () {
-          onPressed();
-        },
-        child: Card(
-          shadowColor: AppColors.blue.withValues(alpha: 0.3),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-            side: const BorderSide(color: Colors.blueGrey, width: 0.05),
-          ),
-          elevation: 3,
-          color: Colors.white,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              // border: Border.all(color: Colors.grey[300]!, width: 1)
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.blueGrey,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 5),
-                      child: Text(
-                        (task.ticketNo != null) ? task.ticketNo.toString() : '',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    // Container(
-                    //   decoration: BoxDecoration(
-                    //     color: Colors.green,
-                    //     borderRadius: BorderRadius.circular(3),
-                    //   ),
-                    //   padding: const EdgeInsets.symmetric(horizontal: 8,vertical: 5),
-                    //   child: Text(
-                    //     (task.ticketNo != null) ? task.ticketNo.toString() : '',
-                    //     style: const TextStyle(
-                    //         color: Colors.white,
-                    //         fontSize: 14,
-                    //         fontWeight: FontWeight.normal
-                    //     ),
-                    //   ),
-                    // ),
+    final c = context.colors;
+    final typeLabel = task.rType.toString() == '8'
+        ? 'CS-Ticket'
+        : (task.rType != null ? task.rType.toString() : '');
+    final title = [
+      if (task.taskDisplay != null && '${task.taskDisplay}'.isNotEmpty)
+        '${task.taskDisplay}',
+      if (task.empName != null && '${task.empName}'.isNotEmpty) '${task.empName}',
+    ].join(' · ');
 
-                    Spacer(),
-                    Icon(
-                      Icons.calendar_month,
-                      color: Colors.blueGrey,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      (task.reqDate != null)
-                          ? DateFormat('MMM dd,yyyy').format(task.reqDate)
-                          : '',
-                      style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 14,
-                          fontWeight: FontWeight.normal),
-                    ),
-                    // Container(
-                    //   decoration: BoxDecoration(
-                    //     color: Colors.grey,
-                    //     borderRadius: BorderRadius.circular(3),
-                    //   ),
-                    //   padding:
-                    //       const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    //   child: Text(
-                    //     (task.reqDate != null)
-                    //         ? DateFormat('MMM dd,yyyy').format(task.reqDate)
-                    //         : '',
-                    //     style: const TextStyle(
-                    //         color: Colors.white,
-                    //         fontSize: 14,
-                    //         fontWeight: FontWeight.normal),
-                    //   ),
-                    // ),
-                  ],
-                ),
-                const SizedBox(
-                  height: 5,
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        "${(task.taskDisplay != null) ? task.taskDisplay! : ''} ${(task.empName == null || task.empName == "") ? '' : "  -  ${task.empName!}"}",
-                        style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                            fontWeight: FontWeight.normal),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: c.cardFill,
+        elevation: isActive ? 2 : 0,
+        shadowColor: c.shadow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: isActive
+                ? c.brand.withValues(alpha: 0.45)
+                : c.border,
+            width: isActive ? 1.4 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPressed,
+          child: Stack(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: c.brand,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    task.ticketNo?.toString() ?? '—',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: c.onBrand,
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              if (typeLabel.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: c.brandSoft,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    typeLabel,
+                                    style: TextStyle(
+                                      color: c.brand,
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const Spacer(),
+                              Icon(
+                                Icons.schedule_rounded,
+                                size: 14,
+                                color: c.iconMuted,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                task.reqDate != null
+                                    ? DateFormat('MMM dd, yyyy')
+                                        .format(task.reqDate as DateTime)
+                                    : '—',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: c.textMuted,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (title.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: c.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                height: 1.25,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                  ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      color: isActive ? c.brand : c.iconMuted,
+                    ),
+                  ),
+                ],
+              ),
+              if (isActive)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 4,
+                    color: c.brand,
+                  ),
                 ),
-                const SizedBox(
-                  height: 5,
-                ),
-                Text(
-                  task.rType.toString() == "8"
-                      ? "CS-Ticket"
-                      : (task.rType != null)
-                          ? task.rType.toString()
-                          : '',
-                  style: const TextStyle(
-                      color: Colors.blue,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
+            ],
           ),
         ),
       ),

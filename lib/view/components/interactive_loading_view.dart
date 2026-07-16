@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:duoob_desktop_app_v1/utils/colors.dart';
+import 'package:duoob_desktop_app_v1/utils/theme_colors.dart';
 import 'package:duoob_desktop_app_v1/view/components/modern_loading_indicator.dart';
 import 'package:flutter/material.dart';
 
@@ -78,6 +78,7 @@ class _InteractiveLoadingViewState extends State<InteractiveLoadingView>
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final tip = widget.tips.isEmpty
         ? 'Please wait…'
         : widget.tips[_tipIndex % widget.tips.length];
@@ -98,11 +99,11 @@ class _InteractiveLoadingViewState extends State<InteractiveLoadingView>
                     width: 88,
                     height: 88,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: c.logoBackdrop,
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.blue.withValues(alpha: 0.12),
+                          color: c.shadow,
                           blurRadius: 24,
                           offset: const Offset(0, 10),
                         ),
@@ -112,10 +113,10 @@ class _InteractiveLoadingViewState extends State<InteractiveLoadingView>
                     child: Image.asset(
                       'assets/images/app_logo_no_back.png',
                       fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(
+                      errorBuilder: (_, __, ___) => Icon(
                         Icons.hourglass_top_rounded,
                         size: 40,
-                        color: AppColors.blue,
+                        color: c.brand,
                       ),
                     ),
                   ),
@@ -126,7 +127,7 @@ class _InteractiveLoadingViewState extends State<InteractiveLoadingView>
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.blue,
+                        color: c.brand,
                       ),
                 ),
                 const SizedBox(height: 12),
@@ -138,14 +139,14 @@ class _InteractiveLoadingViewState extends State<InteractiveLoadingView>
                       tip,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.iconGrey,
+                            color: c.textMuted,
                             height: 1.4,
                           ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 20),
-                const ModernLoadingIndicator(compact: true),
+                ModernLoadingIndicator(compact: true, color: c.loading),
                 const SizedBox(height: 18),
                 const _TipProgressTrack(),
               ],
@@ -185,6 +186,8 @@ class _TipProgressTrackState extends State<_TipProgressTrack>
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+
     return SizedBox(
       width: 160,
       height: 4,
@@ -201,7 +204,7 @@ class _TipProgressTrackState extends State<_TipProgressTrack>
               children: [
                 Positioned.fill(
                   child: ColoredBox(
-                    color: AppColors.blue.withValues(alpha: 0.08),
+                    color: c.isDark ? c.shimmerBase : c.brandSoft,
                   ),
                 ),
                 Positioned(
@@ -213,9 +216,9 @@ class _TipProgressTrackState extends State<_TipProgressTrack>
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          AppColors.blue.withValues(alpha: 0.05),
-                          AppColors.blue.withValues(alpha: 0.8),
-                          AppColors.blue.withValues(alpha: 0.05),
+                          c.loading.withValues(alpha: 0.1),
+                          c.loading,
+                          c.loading.withValues(alpha: 0.1),
                         ],
                       ),
                     ),
