@@ -1,6 +1,6 @@
 name: duoob_desktop_app_v1
 description: "A new Flutter project."
-version: 1.0.4+7
+version: 1.0.5+8
 
 environment:
   sdk: ^3.10.1
