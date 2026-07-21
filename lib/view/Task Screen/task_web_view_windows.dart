@@ -44,15 +44,18 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
   bool _showSuccessAnimation = false;
   bool _canGoBack = false;
   bool _canGoForward = false;
+  bool _resultHandled = false;
   String? _activeUrl;
 
   // Track the current result state
   TaskResult _currentResult = TaskResult.none;
 
-  // URL Constants
-  final String successUrl = 'D365Close.aspx?Action=Success';
-  final String successUrl1 = 'Resultpage.aspx';
-  final String failureUrl = 'D365Close.aspx?Action=Failure';
+  // URL Constants (matched case-insensitively)
+  static const String _successPath = 'd365close.aspx';
+  static const String _successAction = 'action=success';
+  static const String _successUrl1 = 'resultpage.aspx';
+  static const String _failurePath = 'd365close.aspx';
+  static const String _failureAction = 'action=failure';
 
   @override
   void initState() {
@@ -66,6 +69,7 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
     if (widget.url == oldWidget.url) return;
 
     _currentResult = TaskResult.none;
+    _resultHandled = false;
     final newUrl = widget.url;
 
     if (newUrl == null) {
@@ -85,6 +89,35 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
 
   void _safeSetState(VoidCallback fn) {
     if (mounted) setState(fn);
+  }
+
+  bool _isSuccessUrl(String? url) {
+    if (url == null || url.isEmpty) return false;
+    final lower = url.toLowerCase();
+    if (lower.contains(_successUrl1)) return true;
+    return lower.contains(_successPath) && lower.contains(_successAction);
+  }
+
+  bool _isFailureUrl(String? url) {
+    if (url == null || url.isEmpty) return false;
+    final lower = url.toLowerCase();
+    return lower.contains(_failurePath) && lower.contains(_failureAction);
+  }
+
+  /// Detect success/failure as soon as the close URL is hit — do not wait for
+  /// a clean page load (the server often returns a Runtime Error HTML page).
+  void _handleNavigationUrl(String? url) {
+    if (_resultHandled || url == null) return;
+
+    if (_isSuccessUrl(url)) {
+      _resultHandled = true;
+      log('Success URL detected: $url', name: 'TaskWebView');
+      _triggerOverlay(true);
+    } else if (_isFailureUrl(url)) {
+      _resultHandled = true;
+      log('Failure URL detected: $url', name: 'TaskWebView');
+      _triggerOverlay(false);
+    }
   }
 
   Future<void> _updateNavigationState() async {
@@ -184,14 +217,18 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
   void _triggerOverlay(bool isSuccess) async {
     _safeSetState(() {
       _currentResult = isSuccess ? TaskResult.success : TaskResult.failure;
+      _isLoading = false;
     });
 
     await Future.delayed(const Duration(milliseconds: 2500));
+
+    if (!mounted) return;
 
     if (isSuccess && widget.refreshUrlOnSuccess && widget.url != null) {
       final reloadUrl = widget.url!;
       _safeSetState(() {
         _currentResult = TaskResult.none;
+        _resultHandled = false;
         _activeUrl = reloadUrl;
         _isLoading = true;
         _canGoBack = false;
@@ -259,18 +296,27 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                     _webViewController = controller;
                     controller.addJavaScriptHandler(
                       handlerName: "notifyClose",
-                      callback: (args) => _triggerOverlay(true),
+                      callback: (args) {
+                        if (_resultHandled) return;
+                        _resultHandled = true;
+                        _triggerOverlay(true);
+                      },
                     );
                     _updateNavigationState();
                   },
                   onUpdateVisitedHistory: (controller, url, isReload) {
                     _updateNavigationState();
+                    _handleNavigationUrl(url?.toString());
                   },
                   onLoadStart: (controller, url) {
-                    _safeSetState(() => _isLoading = true);
-                    if (url != null) {
-                      _safeSetState(() => _activeUrl = url.toString());
-                    }
+                    final urlStr = url?.toString();
+                    _safeSetState(() {
+                      _isLoading = true;
+                      if (urlStr != null) _activeUrl = urlStr;
+                    });
+                    // Trigger as soon as Success/Failure URL is navigated to —
+                    // the ASP.NET close page often 500s and never cleanly finishes.
+                    _handleNavigationUrl(urlStr);
                   },
                   onLoadStop: (controller, url) async {
                     log(url.toString(), name: 'onLoadStop');
@@ -279,16 +325,7 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                       _hasCompletedInitialLoad = true;
                     });
                     await _updateNavigationState();
-
-                    final currentUrl = url.toString();
-
-                    // URL-based trigger logic
-                    if (currentUrl.contains(successUrl) ||
-                        currentUrl.contains(successUrl1)) {
-                      _triggerOverlay(true);
-                    } else if (currentUrl.contains(failureUrl)) {
-                      _triggerOverlay(false);
-                    }
+                    _handleNavigationUrl(url?.toString() ?? _activeUrl);
                   },
                   onProgressChanged: (controller, progress) {
                     if (progress == 100) {
@@ -296,11 +333,22 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                         _isLoading = false;
                         _hasCompletedInitialLoad = true;
                       });
+                      _handleNavigationUrl(_activeUrl);
                     }
                   },
                   onReceivedError: (controller, request, error) {
                     if (request.url.toString() == "about:blank") return;
                     log("WebView Error: ${error.description}");
+                    // Still treat Success/Failure close URLs as terminal,
+                    // even when the page itself fails to render.
+                    _handleNavigationUrl(request.url.toString());
+                  },
+                  onReceivedHttpError: (controller, request, response) {
+                    log(
+                      'HTTP ${response.statusCode}: ${request.url}',
+                      name: 'TaskWebView',
+                    );
+                    _handleNavigationUrl(request.url.toString());
                   },
 
                   // onCreateWindow: (controller, createWindowRequest) async {
