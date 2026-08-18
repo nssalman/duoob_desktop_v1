@@ -1,5 +1,6 @@
 import 'dart:developer';
 import 'package:duoob_desktop_app_v1/main.dart';
+import 'package:duoob_desktop_app_v1/services/webview_session_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -41,13 +42,7 @@ class _AuthWebViewWindowsState extends State<AuthWebViewWindows> {
   }
 
   Future<void> _clearMicrosoftSession() async {
-    final cookieManager = CookieManager.instance();
-    await cookieManager.deleteCookies(
-      url: WebUri('https://login.microsoftonline.com'),
-    );
-    await cookieManager.deleteCookies(
-      url: WebUri('https://login.live.com'),
-    );
+    await WebViewSessionService.clearAll();
     _safeSetState(() => _sessionCleared = true);
   }
 

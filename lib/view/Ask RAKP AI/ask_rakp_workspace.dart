@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:duoob_desktop_app_v1/services/copilot_auth_service.dart';
 import 'package:duoob_desktop_app_v1/utils/colors.dart';
 import 'package:duoob_desktop_app_v1/utils/constants.dart';
@@ -19,6 +21,7 @@ class _AskRakpWorkspaceState extends State<AskRakpWorkspace> {
   String? _appAccessToken;
   String? _errorMessage;
   bool _isAuthenticating = true;
+  CopilotChatController? _chatController;
 
   @override
   void initState() {
@@ -26,10 +29,31 @@ class _AskRakpWorkspaceState extends State<AskRakpWorkspace> {
     _authenticate();
   }
 
+  @override
+  void dispose() {
+    _chatController?.removeListener(_onChatControllerChanged);
+    super.dispose();
+  }
+
+  void _onChatControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _attachChatController(CopilotChatController controller) {
+    _chatController?.removeListener(_onChatControllerChanged);
+    _chatController = controller;
+    controller.addListener(_onChatControllerChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
   Future<void> _authenticate() async {
     setState(() {
       _isAuthenticating = true;
       _errorMessage = null;
+      _chatController?.removeListener(_onChatControllerChanged);
+      _chatController = null;
     });
 
     try {
@@ -55,6 +79,12 @@ class _AskRakpWorkspaceState extends State<AskRakpWorkspace> {
         _isAuthenticating = false;
       });
     }
+  }
+
+  Future<void> _startNewChat() async {
+    final controller = _chatController;
+    if (controller == null || controller.isInitializing) return;
+    await controller.startNewChat();
   }
 
   @override
@@ -165,6 +195,21 @@ class _AskRakpWorkspaceState extends State<AskRakpWorkspace> {
               ],
             ),
           ),
+          if (!_isAuthenticating &&
+              _errorMessage == null &&
+              _appAccessToken != null)
+            TextButton.icon(
+              onPressed: _chatController == null ||
+                      (_chatController?.isInitializing ?? true)
+                  ? null
+                  : () => unawaited(_startNewChat()),
+              icon: const Icon(Icons.add_comment_outlined, size: 18),
+              label: const Text('New chat'),
+              style: TextButton.styleFrom(
+                foregroundColor: c.brand,
+                disabledForegroundColor: c.textMuted,
+              ),
+            ),
         ],
       ),
     );
@@ -244,6 +289,7 @@ class _AskRakpWorkspaceState extends State<AskRakpWorkspace> {
       backendBaseUrl: Constants.copilotBackendBaseUrl,
       appAccessToken: _appAccessToken!,
       embedded: true,
+      onControllerReady: _attachChatController,
     );
   }
 }

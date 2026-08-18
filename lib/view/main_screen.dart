@@ -1,7 +1,9 @@
 import 'dart:ui';
 
+import 'package:duoob_desktop_app_v1/controller/task_provider.dart';
 import 'package:duoob_desktop_app_v1/model/login_response_model.dart';
 import 'package:duoob_desktop_app_v1/services/user_repository.dart';
+import 'package:duoob_desktop_app_v1/services/webview_session_service.dart';
 import 'package:duoob_desktop_app_v1/utils/colors.dart';
 import 'package:duoob_desktop_app_v1/view/Ask%20RAKP%20AI/ask_rakp_workspace.dart';
 import 'package:duoob_desktop_app_v1/view/My%20RAKP/my_rakp_screen.dart';
@@ -11,7 +13,7 @@ import 'package:duoob_desktop_app_v1/view/components/custom_dialogue.dart';
 import 'package:duoob_desktop_app_v1/view/root_wrapper.dart';
 import 'package:duoob_desktop_app_v1/view/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:provider/provider.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -62,13 +64,10 @@ class _MainScreenState extends State<MainScreen> {
     final userRepository = UserRepository();
     await userRepository.clear();
     userRepository.setUserLoggedIn(false);
-    final cookieManager = CookieManager.instance();
-    await cookieManager.deleteCookies(
-      url: WebUri('https://login.microsoftonline.com'),
-    );
-    await cookieManager.deleteCookies(
-      url: WebUri('https://login.live.com'),
-    );
+    if (mounted) {
+      context.read<TaskProvider>().resetForLogout();
+    }
+    await WebViewSessionService.clearAll();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => RootWrapper()),

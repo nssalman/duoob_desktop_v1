@@ -5,6 +5,7 @@ import 'dart:ui';
 
 import 'package:duoob_desktop_app_v1/utils/colors.dart';
 import 'package:duoob_desktop_app_v1/utils/theme_colors.dart';
+import 'package:duoob_desktop_app_v1/services/copilot_auth_service.dart';
 import 'package:duoob_desktop_app_v1/view/components/modern_loading_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -214,17 +215,15 @@ class DirectLineClient {
   final Set<String> _seenActivityIds = <String>{};
 
   static const _legacyUserId = 'dl_test_user';
-  /// Direct Line user id expected by the production Copilot / backend mapping.
-  static const _directLineUserId = _legacyUserId;
 
   bool _isLocalUser(String? fromId) {
     if (fromId == null || fromId.isEmpty) return false;
-    return fromId == _userId ||
-        fromId == _directLineUserId ||
-        fromId == _legacyUserId;
+    return fromId == _userId || fromId == _legacyUserId;
   }
 
   Future<void> start(BackendDirectLineToken backendToken) async {
+    // Use the session userId from the backend (dl_dt_…). Copilot binds SSO
+    // to that conversation identity — forcing dl_test_user caused 412 exchanges.
     _userId = backendToken.userId;
     _currentToken = backendToken.token;
 
@@ -258,8 +257,8 @@ class DirectLineClient {
       'textFormat': 'plain',
       'locale': locale,
       'from': {
-        'id': _directLineUserId,
-        'name': 'IT Account',
+        'id': _userId,
+        'name': _userId,
       },
     });
   }
@@ -315,6 +314,48 @@ class DirectLineClient {
       },
       'locale': locale,
     });
+  }
+
+  Future<void> _exchangeOauthToken({
+    required String connectionName,
+    required String exchangeId,
+    String? resourceUri,
+  }) async {
+    String? token = appAccessToken;
+    if (resourceUri != null && resourceUri.trim().isNotEmpty) {
+      debugPrint('Copilot SSO acquiring token for uri=$resourceUri');
+      final scoped = await CopilotAuthService().getTokenForScope(resourceUri);
+      if (scoped != null && scoped.isNotEmpty) {
+        token = scoped;
+      } else {
+        debugPrint('Copilot SSO resource token unavailable; using app token.');
+      }
+    }
+
+    if (token == null || token.isEmpty) {
+      debugPrint('Copilot SSO skipped: no token.');
+      return;
+    }
+
+    try {
+      await _postActivity({
+        'type': 'invoke',
+        'name': 'signin/tokenExchange',
+        'value': {
+          'id': exchangeId,
+          'connectionName': connectionName,
+          'token': token,
+        },
+        'from': {
+          'id': _userId,
+          'name': _userId,
+        },
+        'locale': locale,
+      });
+      debugPrint('Copilot SSO token exchange posted for $_userId');
+    } catch (e) {
+      debugPrint('Copilot SSO token exchange failed: $e');
+    }
   }
 
   Future<void> _postActivityWithRecovery(Map<String, dynamic> activity) async {
@@ -440,6 +481,7 @@ class DirectLineClient {
           appAccessToken != null &&
           appAccessToken!.isNotEmpty) {
         final attachments = activity['attachments'] as List;
+        var handledOauth = false;
 
         for (var attachment in attachments) {
           if (attachment['contentType'] ==
@@ -451,25 +493,24 @@ class DirectLineClient {
             final id = tokenExchangeResource?['id'] as String? ??
                 content?['id'] as String? ??
                 '';
+            final resourceUri = tokenExchangeResource?['uri'] as String?;
 
             if (connectionName != null) {
-              unawaited(_postActivity({
-                'type': 'invoke',
-                'name': 'signin/tokenExchange',
-                'value': {
-                  'id': id,
-                  'connectionName': connectionName,
-                  'token': appAccessToken,
-                },
-                'from': {
-                  'id': _directLineUserId,
-                  'name': 'IT Account',
-                },
-              }));
-              return;
+              debugPrint(
+                'OAuthCard connection=$connectionName id=$id uri=$resourceUri',
+              );
+              unawaited(_exchangeOauthToken(
+                connectionName: connectionName,
+                exchangeId: id,
+                resourceUri: resourceUri,
+              ));
+              handledOauth = true;
+              break;
             }
           }
         }
+
+        if (handledOauth) continue;
       }
 
       final type = activity['type'] as String?;
@@ -585,8 +626,18 @@ class CopilotChatController extends ChangeNotifier {
   bool _isSending = false;
   bool get isSending => _isSending;
 
+  bool _isThinking = false;
+  bool get isThinking => _isThinking;
+
+  bool _ignoreIncoming = false;
+
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
+
+  bool get _hasUserStartedChat =>
+      _messages.any((m) => m.author == ChatAuthor.user);
+
+  bool get showWelcome => !_isInitializing && !_hasUserStartedChat;
 
   Future<void> initialize() async {
     if (_isInitializing || _directLineClient != null) {
@@ -609,21 +660,27 @@ class CopilotChatController extends ChangeNotifier {
       await client.start(backendToken);
 
       client.messages.listen((ChatMessage message) {
+        if (_ignoreIncoming && message.author != ChatAuthor.user) {
+          return;
+        }
+
         if (message.author == ChatAuthor.system &&
             message.text == _thinkingIndicatorText) {
+          if (!_hasUserStartedChat || !_isThinking) return;
           if (_messages.isNotEmpty &&
               _messages.last.author == ChatAuthor.system) {
             return;
           }
         } else if (message.author == ChatAuthor.bot) {
-          _messages.removeWhere((m) =>
-              m.author == ChatAuthor.system &&
-              m.text == _thinkingIndicatorText);
+          if (!_hasUserStartedChat) return;
+          _removeThinkingIndicator();
+          _isThinking = false;
 
           final lastUserIndex =
               _messages.lastIndexWhere((m) => m.author == ChatAuthor.user);
           if (lastUserIndex != -1 &&
               _messages[lastUserIndex].text.trim() == message.text.trim()) {
+            notifyListeners();
             return;
           }
         }
@@ -648,8 +705,39 @@ class CopilotChatController extends ChangeNotifier {
   Future<void> reinitialize() async {
     await _directLineClient?.dispose();
     _directLineClient = null;
+    _messages.clear();
+    _isSending = false;
+    _isThinking = false;
+    _ignoreIncoming = false;
     _isInitializing = false;
     await initialize();
+  }
+
+  Future<void> startNewChat() async {
+    if (_isInitializing) return;
+    _messages.clear();
+    _isSending = false;
+    _isThinking = false;
+    _ignoreIncoming = false;
+    _errorMessage = null;
+    notifyListeners();
+    await reinitialize();
+  }
+
+  void stopThinking() {
+    if (!_isThinking && !_isSending) return;
+    _ignoreIncoming = true;
+    _isThinking = false;
+    _isSending = false;
+    _removeThinkingIndicator();
+    notifyListeners();
+  }
+
+  void _removeThinkingIndicator() {
+    _messages.removeWhere(
+      (m) =>
+          m.author == ChatAuthor.system && m.text == _thinkingIndicatorText,
+    );
   }
 
   Future<void> sendMessage(String text) async {
@@ -658,6 +746,11 @@ class CopilotChatController extends ChangeNotifier {
       return;
     }
 
+    if (_isThinking) {
+      stopThinking();
+    }
+
+    _ignoreIncoming = false;
     _messages.add(
       ChatMessage(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
@@ -667,6 +760,7 @@ class CopilotChatController extends ChangeNotifier {
       ),
     );
     _isSending = true;
+    _isThinking = true;
     _errorMessage = null;
     notifyListeners();
 
@@ -675,6 +769,8 @@ class CopilotChatController extends ChangeNotifier {
       await _directLineClient!.sendMessage(trimmed);
     } catch (error) {
       _errorMessage = error.toString();
+      _isThinking = false;
+      _removeThinkingIndicator();
     } finally {
       _isSending = false;
       notifyListeners();
@@ -695,6 +791,7 @@ class CopilotChatPage extends StatefulWidget {
     this.locale = 'en-US',
     this.title = 'Ask RAKP AI',
     this.embedded = false,
+    this.onControllerReady,
   });
 
   final String backendBaseUrl;
@@ -702,6 +799,7 @@ class CopilotChatPage extends StatefulWidget {
   final String locale;
   final String title;
   final bool embedded;
+  final ValueChanged<CopilotChatController>? onControllerReady;
 
   @override
   State<CopilotChatPage> createState() => _CopilotChatPageState();
@@ -728,6 +826,10 @@ class _CopilotChatPageState extends State<CopilotChatPage>
     );
     unawaited(_controller.initialize());
     _controller.addListener(_scrollToBottomSoon);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onControllerReady?.call(_controller);
+    });
     _keepAliveTimer = Timer.periodic(
       const Duration(minutes: 5),
       (_) => unawaited(_controller.ensureSessionAlive()),
@@ -814,7 +916,7 @@ class _CopilotChatPageState extends State<CopilotChatPage>
             Expanded(
               child: _controller.isInitializing
                   ? const Center(child: ModernLoadingIndicator())
-                  : _controller.messages.isEmpty
+                  : _controller.showWelcome
                       ? _CopilotWelcome(
                           prompts: _starterPrompts,
                           onPromptTap: _sendSuggestion,
@@ -841,8 +943,9 @@ class _CopilotChatPageState extends State<CopilotChatPage>
 
   Widget _buildInputBar(BuildContext context) {
     final c = context.colors;
+    final isThinking = _controller.isThinking;
     final canSend =
-        !_controller.isInitializing && !_controller.isSending;
+        !_controller.isInitializing && !_controller.isSending && !isThinking;
 
     return SafeArea(
       top: false,
@@ -876,7 +979,13 @@ class _CopilotChatPageState extends State<CopilotChatPage>
                       minLines: 1,
                       maxLines: 5,
                       textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _handleSend(),
+                      onSubmitted: (_) {
+                        if (_controller.isThinking) {
+                          _controller.stopThinking();
+                          return;
+                        }
+                        _handleSend();
+                      },
                       style: TextStyle(
                         color: c.textPrimary,
                         fontSize: 14.5,
@@ -900,22 +1009,27 @@ class _CopilotChatPageState extends State<CopilotChatPage>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Material(
-                    color: canSend ? c.brand : c.iconMuted,
+                  Tooltip(
+                    message: isThinking ? 'Stop' : 'Send',
+                    child: Material(
+                    color: isThinking
+                        ? c.brand
+                        : (canSend ? c.brand : c.iconMuted),
                     borderRadius: BorderRadius.circular(14),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(14),
-                      onTap: canSend ? _handleSend : null,
+                      onTap: isThinking
+                          ? _controller.stopThinking
+                          : (canSend ? _handleSend : null),
                       child: SizedBox(
                         width: 44,
                         height: 44,
                         child: Center(
-                          child: _controller.isSending
-                              ? ModernLoadingIndicator(
+                          child: isThinking
+                              ? Icon(
+                                  Icons.stop_rounded,
                                   color: c.onBrand,
-                                  compact: true,
-                                  dotSize: 6,
-                                  spacing: 4,
+                                  size: 22,
                                 )
                               : Icon(
                                   Icons.arrow_upward_rounded,
@@ -925,6 +1039,7 @@ class _CopilotChatPageState extends State<CopilotChatPage>
                         ),
                       ),
                     ),
+                  ),
                   ),
                 ],
               ),
@@ -937,6 +1052,7 @@ class _CopilotChatPageState extends State<CopilotChatPage>
 
   void _sendSuggestion(String text) {
     if (_controller.isInitializing || _controller.isSending) return;
+    if (_controller.isThinking) _controller.stopThinking();
     unawaited(_controller.sendMessage(text));
   }
 

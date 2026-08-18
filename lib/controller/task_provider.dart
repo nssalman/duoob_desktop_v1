@@ -512,6 +512,27 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clears in-memory task data so a newly logged-in user never sees the
+  /// previous account's lists.
+  void resetForLogout() {
+    isDD365Loading = false;
+    isTaskListLoading = false;
+    isTaskLinkLoading = false;
+    isAllSelect = false;
+    isD365TaskListShowing = true;
+    d365TaskList.clear();
+    tasksOfGetMyTask.clear();
+    myTaskList.clear();
+    hrTaskList.clear();
+    assetTaskList.clear();
+    userList.clear();
+    _tasksOfGetMyTask.clear();
+    _mytask = null;
+    userTaskMap.clear();
+    userProfileModelView = null;
+    notifyListeners();
+  }
+
   bool checkForSelection() {
     return d365TaskList.any((e) => e.isSelected);
   }
