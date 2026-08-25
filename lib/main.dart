@@ -113,7 +113,12 @@ class _MyAppState extends State<MyApp> with WindowListener {
     _isCloseDialogOpen = false;
 
     if (shouldClose == true) {
-      await windowManager.destroy();
+      // windowManager.destroy() waits on native engine/plugin teardown
+      // (WebView2/WKWebView instances tear down slowly), which made the
+      // app appear stuck after confirming close. Hide immediately for
+      // instant feedback, then force-exit the process.
+      await windowManager.hide();
+      exit(0);
     }
   }
 
