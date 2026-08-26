@@ -326,6 +326,26 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                     });
                     await _updateNavigationState();
                     _handleNavigationUrl(url?.toString() ?? _activeUrl);
+                    // Some ERP pages never navigate to a Success/Failure close
+                    // URL — they call their own page-defined closeme() to
+                    // close the (originally popup) window instead. Wrap it so
+                    // calling it also reports success through notifyClose.
+                    await controller.evaluateJavascript(
+                      source: '''
+                        (function() {
+                          if (typeof window.closeme === 'function' && !window.__duoobCloseMeWrapped) {
+                            window.__duoobCloseMeWrapped = true;
+                            var originalCloseMe = window.closeme;
+                            window.closeme = function() {
+                              try {
+                                window.flutter_inappwebview.callHandler('notifyClose');
+                              } catch (e) {}
+                              return originalCloseMe.apply(this, arguments);
+                            };
+                          }
+                        })();
+                      ''',
+                    );
                   },
                   onProgressChanged: (controller, progress) {
                     if (progress == 100) {
