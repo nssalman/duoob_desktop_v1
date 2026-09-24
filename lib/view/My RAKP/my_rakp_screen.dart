@@ -3,9 +3,7 @@ import 'package:duoob_desktop_app_v1/view/Task%20Screen/task_web_view_windows.da
 import 'package:flutter/material.dart';
 
 class MyRakpWorkspace extends StatelessWidget {
-  const MyRakpWorkspace({super.key, this.isActiveTab = true});
-
-  final bool isActiveTab;
+  const MyRakpWorkspace({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +14,6 @@ class MyRakpWorkspace extends StatelessWidget {
         url: Constants.myRakpUrl,
         refreshUrlOnSuccess: true,
         blockUiWhileLoading: false,
-        isActiveTab: isActiveTab,
         loadingTitle: 'Opening My RAKP',
         loadingTips: const [
           'Warming up your dashboard…',

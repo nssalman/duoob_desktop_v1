@@ -19,7 +19,6 @@ class TaskWebViewWindows extends StatefulWidget {
   final String loadingTitle;
   final List<String> loadingTips;
   final VoidCallback? onSubmissionSuccess;
-  final bool isActiveTab;
 
   const TaskWebViewWindows({
     super.key,
@@ -34,7 +33,6 @@ class TaskWebViewWindows extends StatefulWidget {
       'Loading your workspace…',
     ],
     this.onSubmissionSuccess,
-    this.isActiveTab = true,
   });
 
   @override
@@ -80,20 +78,18 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows>
 
   // WebView2 does not automatically hide its native compositor surface when
   // the app window is minimized, which can leave it visible/hit-testable
-  // over the desktop. Explicitly pause/resume it around minimize/restore —
-  // but only for background instances (kept alive offstage behind another
-  // tab). pause()/resume() suspend the underlying WebView2 process, so
-  // applying it to the tab the user is actually looking at would make that
-  // webview appear to vanish and reload once the window is restored.
+  // over the desktop — this happens for the active tab's webview too, not
+  // just ones kept alive offstage, so all live instances need this.
+  // Known trade-off: pause()/resume() suspend the underlying WebView2
+  // process (there is no lighter visibility-only toggle exposed on Windows
+  // by flutter_inappwebview), so the page can appear to reload on restore.
   @override
   void onWindowMinimize() {
-    if (widget.isActiveTab) return;
     _webViewController?.pause();
   }
 
   @override
   void onWindowRestore() {
-    if (widget.isActiveTab) return;
     _webViewController?.resume();
   }
 
