@@ -3,9 +3,11 @@ import 'package:duoob_desktop_app_v1/main.dart';
 import 'package:duoob_desktop_app_v1/services/download_services.dart';
 import 'package:duoob_desktop_app_v1/view/Task%20Screen/new_vindow_screen.dart';
 import 'package:duoob_desktop_app_v1/view/components/interactive_loading_view.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:lottie/lottie.dart';
+import 'package:window_manager/window_manager.dart';
 
 // Enum to manage which overlay to show
 enum TaskResult { none, success, failure }
@@ -37,7 +39,8 @@ class TaskWebViewWindows extends StatefulWidget {
   State<TaskWebViewWindows> createState() => _TaskWebViewWindowsState();
 }
 
-class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
+class _TaskWebViewWindowsState extends State<TaskWebViewWindows>
+    with WindowListener {
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
   bool _hasCompletedInitialLoad = false;
@@ -57,10 +60,33 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
   static const String _failurePath = 'd365close.aspx';
   static const String _failureAction = 'action=failure';
 
+  static bool get _isWindows =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
   @override
   void initState() {
     super.initState();
     _activeUrl = widget.url;
+    if (_isWindows) windowManager.addListener(this);
+  }
+
+  @override
+  void dispose() {
+    if (_isWindows) windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  // WebView2 does not automatically hide its native compositor surface when
+  // the app window is minimized, which can leave it visible/hit-testable
+  // over the desktop. Explicitly pause/resume it around minimize/restore.
+  @override
+  void onWindowMinimize() {
+    _webViewController?.pause();
+  }
+
+  @override
+  void onWindowRestore() {
+    _webViewController?.resume();
   }
 
   @override
