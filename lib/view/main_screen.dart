@@ -100,8 +100,9 @@ class _MainScreenState extends State<MainScreen> {
                 if (_selectedIndex != 2)
                   Offstage(
                     offstage: _selectedIndex != 0,
-                    child: const MyRakpWorkspace(
-                      key: ValueKey('my-rakp-workspace'),
+                    child: MyRakpWorkspace(
+                      key: const ValueKey('my-rakp-workspace'),
+                      isActiveTab: _selectedIndex == 0,
                     ),
                   ),
                 Offstage(

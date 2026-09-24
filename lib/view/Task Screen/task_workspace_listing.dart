@@ -171,6 +171,7 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
           key: ValueKey(_activeUrl ?? 'empty'),
           url: widget.suspendWebView ? null : _activeUrl,
           onSubmissionSuccess: _handleTaskSubmissionSuccess,
+          isActiveTab: !widget.suspendWebView,
         ),
       ),
     );
