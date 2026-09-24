@@ -49,6 +49,7 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows>
   bool _canGoForward = false;
   bool _resultHandled = false;
   String? _activeUrl;
+  String? _urlBeforeMinimize;
 
   // Track the current result state
   TaskResult _currentResult = TaskResult.none;
@@ -80,17 +81,31 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows>
   // the app window is minimized, which can leave it visible/hit-testable
   // over the desktop — this happens for the active tab's webview too, not
   // just ones kept alive offstage, so all live instances need this.
-  // Known trade-off: pause()/resume() suspend the underlying WebView2
-  // process (there is no lighter visibility-only toggle exposed on Windows
-  // by flutter_inappwebview), so the page can appear to reload on restore.
+  // pause()/resume() (WebView2's TrySuspend/Resume) turned out to leave the
+  // webview in a broken state that wouldn't recover on its own, so instead
+  // fully unmount the native webview on minimize and recreate it fresh on
+  // restore — the same teardown path already used (and proven reliable)
+  // when a tab is suspended via a null url.
   @override
   void onWindowMinimize() {
-    _webViewController?.pause();
+    if (_activeUrl == null) return;
+    _urlBeforeMinimize = _activeUrl;
+    _safeSetState(() => _activeUrl = null);
   }
 
   @override
   void onWindowRestore() {
-    _webViewController?.resume();
+    final url = _urlBeforeMinimize;
+    if (url == null) return;
+    _urlBeforeMinimize = null;
+    _currentResult = TaskResult.none;
+    _resultHandled = false;
+    _safeSetState(() {
+      _activeUrl = url;
+      _isLoading = true;
+      _canGoBack = false;
+      _canGoForward = false;
+    });
   }
 
   @override
