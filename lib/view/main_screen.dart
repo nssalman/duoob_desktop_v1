@@ -97,26 +97,31 @@ class _MainScreenState extends State<MainScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (_selectedIndex != 2)
-                  Offstage(
-                    offstage: _selectedIndex != 0,
-                    child: const MyRakpWorkspace(
-                      key: ValueKey('my-rakp-workspace'),
-                    ),
+                // WebView2 is a native window. Offstage does not hide it, so
+                // MYRAKP and Reports must not both be in the tree — the first
+                // one stays painted on top and both end up on the last page.
+                if (_selectedIndex == 0)
+                  const MyRakpWorkspace(
+                    key: ValueKey('my-rakp-workspace'),
                   ),
                 Offstage(
+                  key: const ValueKey('tasks-workspace'),
                   offstage: _selectedIndex != 1,
                   child: TaskWorkspace(
                     suspendWebView: _selectedIndex != 1,
                   ),
                 ),
                 if (_selectedIndex == 2)
-                  const ReportWorkspace(key: ValueKey('report-workspace')),
+                  const ReportWorkspace(
+                    key: ValueKey('report-workspace'),
+                  ),
                 Offstage(
+                  key: const ValueKey('ask-workspace'),
                   offstage: _selectedIndex != 3,
                   child: const AskRakpWorkspace(),
                 ),
                 Offstage(
+                  key: const ValueKey('settings-workspace'),
                   offstage: _selectedIndex != 4,
                   child: const SettingsScreen(),
                 ),

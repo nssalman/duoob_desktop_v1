@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:lottie/lottie.dart';
-import 'package:window_manager/window_manager.dart';
 
 // Enum to manage which overlay to show
 enum TaskResult { none, success, failure }
@@ -39,8 +38,7 @@ class TaskWebViewWindows extends StatefulWidget {
   State<TaskWebViewWindows> createState() => _TaskWebViewWindowsState();
 }
 
-class _TaskWebViewWindowsState extends State<TaskWebViewWindows>
-    with WindowListener {
+class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
   bool _hasCompletedInitialLoad = false;
@@ -68,33 +66,39 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows>
   void initState() {
     super.initState();
     _activeUrl = widget.url;
-    if (_isWindows) windowManager.addListener(this);
+    if (!_isWindows) return;
+    appWindowMinimized.addListener(_onAppWindowMinimized);
+    // Assign directly: setState is not allowed from initState. The first
+    // build already sees the hidden URL.
+    if (appWindowMinimized.value && _activeUrl != null) {
+      _urlBeforeMinimize = _activeUrl;
+      _activeUrl = null;
+    }
   }
 
   @override
   void dispose() {
-    if (_isWindows) windowManager.removeListener(this);
+    if (_isWindows) appWindowMinimized.removeListener(_onAppWindowMinimized);
     super.dispose();
   }
 
-  // WebView2 does not automatically hide its native compositor surface when
-  // the app window is minimized, which can leave it visible/hit-testable
-  // over the desktop — this happens for the active tab's webview too, not
-  // just ones kept alive offstage, so all live instances need this.
-  // pause()/resume() (WebView2's TrySuspend/Resume) turned out to leave the
-  // webview in a broken state that wouldn't recover on its own, so instead
-  // fully unmount the native webview on minimize and recreate it fresh on
-  // restore — the same teardown path already used (and proven reliable)
-  // when a tab is suspended via a null url.
-  @override
-  void onWindowMinimize() {
-    if (_activeUrl == null) return;
-    _urlBeforeMinimize = _activeUrl;
-    _safeSetState(() => _activeUrl = null);
+  // WebView2 does not hide its compositor surface when the parent window
+  // minimizes, including webviews kept alive offstage. pause()/resume()
+  // (TrySuspend/Resume) left the control broken, so the native view is
+  // unmounted for the whole time [appWindowMinimized] is true and created
+  // again from the saved URL when the window is visible.
+  void _onAppWindowMinimized() {
+    _applyWindowMinimized(appWindowMinimized.value);
   }
 
-  @override
-  void onWindowRestore() {
+  void _applyWindowMinimized(bool minimized) {
+    if (minimized) {
+      if (_activeUrl == null) return;
+      _urlBeforeMinimize = _activeUrl;
+      _safeSetState(() => _activeUrl = null);
+      return;
+    }
+
     final url = _urlBeforeMinimize;
     if (url == null) return;
     _urlBeforeMinimize = null;
@@ -115,9 +119,18 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows>
 
     _currentResult = TaskResult.none;
     _resultHandled = false;
+    // A parent url change (tab suspend, opening a task) replaces anything
+    // saved for minimize, so restore cannot reload the previous page.
+    _urlBeforeMinimize = null;
     final newUrl = widget.url;
 
     if (newUrl == null) {
+      _safeSetState(() => _activeUrl = null);
+      return;
+    }
+
+    if (_isWindows && appWindowMinimized.value) {
+      _urlBeforeMinimize = newUrl;
       _safeSetState(() => _activeUrl = null);
       return;
     }
@@ -167,13 +180,18 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows>
 
   Future<void> _updateNavigationState() async {
     final controller = _webViewController;
-    if (controller == null) return;
-    final canBack = await controller.canGoBack();
-    final canForward = await controller.canGoForward();
-    _safeSetState(() {
-      _canGoBack = canBack;
-      _canGoForward = canForward;
-    });
+    if (controller == null || !mounted) return;
+    try {
+      final canBack = await controller.canGoBack();
+      final canForward = await controller.canGoForward();
+      _safeSetState(() {
+        _canGoBack = canBack;
+        _canGoForward = canForward;
+      });
+    } catch (_) {
+      // The webview can be torn down mid-flight (e.g. window minimized
+      // while this was in progress) — nothing to update in that case.
+    }
   }
 
   Future<void> _goBack() async {
@@ -375,8 +393,10 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows>
                     // URL — they call their own page-defined closeme() to
                     // close the (originally popup) window instead. Wrap it so
                     // calling it also reports success through notifyClose.
-                    await controller.evaluateJavascript(
-                      source: '''
+                    if (!mounted) return;
+                    try {
+                      await controller.evaluateJavascript(
+                        source: '''
                         (function() {
                           if (typeof window.closeme === 'function' && !window.__duoobCloseMeWrapped) {
                             window.__duoobCloseMeWrapped = true;
@@ -390,7 +410,11 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows>
                           }
                         })();
                       ''',
-                    );
+                      );
+                    } catch (_) {
+                      // The webview can be torn down mid-flight (e.g. window
+                      // minimized while this was in progress) — nothing to do.
+                    }
                   },
                   onProgressChanged: (controller, progress) {
                     if (progress == 100) {

@@ -16,6 +16,17 @@ import 'package:path/path.dart' as p;
 
 WebViewEnvironment? webViewEnvironment;
 
+/// True while the Windows app window is minimized.
+///
+/// WebView2 leaves its compositor surface hit-testable over the desktop
+/// unless the native view is destroyed, so each [TaskWebViewWindows] unmounts
+/// while this is true and remounts when it goes false.
+///
+/// This is updated from [WindowManager.isMinimized], not from
+/// [WindowListener.onWindowRestore]. Restoring a maximized window emits
+/// [WindowListener.onWindowMaximize] and never `onWindowRestore`.
+final ValueNotifier<bool> appWindowMinimized = ValueNotifier(false);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
@@ -67,11 +78,13 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WindowListener {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   bool _isCloseDialogOpen = false;
+  int _minimizeSyncGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    _syncWindowMinimized();
   }
 
   @override
@@ -83,6 +96,32 @@ class _MyAppState extends State<MyApp> with WindowListener {
   @override
   void onWindowClose() {
     _confirmAppClose();
+  }
+
+  @override
+  void onWindowMinimize() => _syncWindowMinimized();
+
+  @override
+  void onWindowRestore() => _syncWindowMinimized();
+
+  @override
+  void onWindowMaximize() => _syncWindowMinimized();
+
+  @override
+  void onWindowUnmaximize() => _syncWindowMinimized();
+
+  @override
+  void onWindowFocus() => _syncWindowMinimized();
+
+  /// Last query wins. Minimize/restore/maximize can overlap, and an older
+  /// [WindowManager.isMinimized] result must not overwrite a newer one.
+  Future<void> _syncWindowMinimized() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return;
+    final generation = ++_minimizeSyncGeneration;
+    final minimized = await windowManager.isMinimized();
+    if (!mounted || generation != _minimizeSyncGeneration) return;
+    if (appWindowMinimized.value == minimized) return;
+    appWindowMinimized.value = minimized;
   }
 
   Future<void> _confirmAppClose() async {

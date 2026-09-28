@@ -15,7 +15,9 @@ class _AuthWebViewWindowsState extends State<AuthWebViewWindows> {
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
   bool _sessionCleared = false;
+  bool _webViewSuspended = false;
   String? _errorMessage;
+  late String _currentUrl;
 
   static const String _redirectBase =
       'https://rpsmart.com/redirecturl_RakpAppmob.aspx';
@@ -38,7 +40,34 @@ class _AuthWebViewWindowsState extends State<AuthWebViewWindows> {
   @override
   void initState() {
     super.initState();
+    _currentUrl = _authUrl;
+    appWindowMinimized.addListener(_onAppWindowMinimized);
+    _webViewSuspended = appWindowMinimized.value;
     _clearMicrosoftSession();
+  }
+
+  @override
+  void dispose() {
+    appWindowMinimized.removeListener(_onAppWindowMinimized);
+    super.dispose();
+  }
+
+  // Same WebView2 minimize bug as TaskWebViewWindows: the native surface
+  // stays hit-testable over the desktop unless the view is unmounted.
+  void _onAppWindowMinimized() {
+    final minimized = appWindowMinimized.value;
+    if (minimized) {
+      if (_webViewSuspended) return;
+      _webViewController = null;
+      _safeSetState(() => _webViewSuspended = true);
+      return;
+    }
+    if (!_webViewSuspended) return;
+    _safeSetState(() {
+      _webViewSuspended = false;
+      _isLoading = true;
+      _errorMessage = null;
+    });
   }
 
   Future<void> _clearMicrosoftSession() async {
@@ -62,17 +91,20 @@ class _AuthWebViewWindowsState extends State<AuthWebViewWindows> {
           // Refresh button in case it gets stuck
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => _webViewController?.reload(),
+            onPressed: _webViewSuspended
+                ? null
+                : () => _webViewController?.reload(),
           )
         ],
       ),
       body: Stack(
         children: [
           // 1. The WebView - Wrapped in Positioned.fill for Stack stability
-          Positioned.fill(
-            child: InAppWebView(
+          if (!_webViewSuspended)
+            Positioned.fill(
+              child: InAppWebView(
               webViewEnvironment: webViewEnvironment,
-              initialUrlRequest: URLRequest(url: WebUri(_authUrl)),
+              initialUrlRequest: URLRequest(url: WebUri(_currentUrl)),
               // initialSettings: InAppWebViewSettings(
               //   javaScriptEnabled: true,
               //   useShouldOverrideUrlLoading: true,
@@ -82,10 +114,15 @@ class _AuthWebViewWindowsState extends State<AuthWebViewWindows> {
               onWebViewCreated: (controller) => _webViewController = controller,
               onLoadStart: (controller, url) {
                 log("Load Started: $url");
+                final urlStr = url?.toString();
+                if (urlStr != null && urlStr.isNotEmpty) _currentUrl = urlStr;
                 _safeSetState(() => _isLoading = true);
               },
               onLoadStop: (controller, url) async {
                 log("Load Stopped: $url");
+                if (!mounted) return;
+                final urlStr = url?.toString();
+                if (urlStr != null && urlStr.isNotEmpty) _currentUrl = urlStr;
                 _safeSetState(() => _isLoading = false);
 
                 if (url != null && url.toString().startsWith(_redirectBase)) {
