@@ -36,6 +36,7 @@ class TaskProvider with ChangeNotifier {
   UserProfileModel? userProfileModelView;
 
   // --- Device Info ---
+  // ignore: unused_field
   String? _deviceId, _manufacturer, _platform, _version, _model;
 
   // --- UI Actions ---

@@ -392,6 +392,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     final displayName = _user?.userName ?? 'Signed in user';
+    // ignore: unused_local_variable
     final userId = _user?.userId;
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 

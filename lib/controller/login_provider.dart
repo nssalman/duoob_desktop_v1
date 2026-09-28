@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:developer';
-
 import 'package:duoob_desktop_app_v1/model/login_response_model.dart';
 import 'package:duoob_desktop_app_v1/model/user_profile_model.dart';
 import 'package:duoob_desktop_app_v1/services/api_services.dart';
@@ -9,7 +7,6 @@ import 'package:duoob_desktop_app_v1/utils/constants.dart';
 import 'package:duoob_desktop_app_v1/view/components/info_dialog.dart';
 import 'package:duoob_desktop_app_v1/view/main_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart';
 
 class LoginProvider with ChangeNotifier {
   final UserRepository userRepository = UserRepository();
@@ -54,6 +51,7 @@ class LoginProvider with ChangeNotifier {
         data['password'] = passEncyp;
       }
 
+      // ignore: unused_local_variable
       Map<String, String> headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Authorization': '~@#\$%^&()_+|}{P:"?><-=/-+."}',

@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 
+// ignore: body_might_complete_normally_nullable
 Future<String?> downloadWithWebViewCookies({
   required String url,
   required String fileName,
@@ -23,6 +23,7 @@ Future<String?> downloadWithWebViewCookies({
     final savePath = '${dir.path}/${url.split('/').last}';
 
     final dio = Dio();
+    // ignore: unused_local_variable
     final response = await dio.download(
       url,
       savePath,

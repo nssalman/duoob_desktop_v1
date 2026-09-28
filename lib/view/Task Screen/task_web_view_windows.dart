@@ -1,7 +1,6 @@
 import 'dart:developer';
 import 'package:duoob_desktop_app_v1/main.dart';
 import 'package:duoob_desktop_app_v1/services/download_services.dart';
-import 'package:duoob_desktop_app_v1/view/Task%20Screen/new_vindow_screen.dart';
 import 'package:duoob_desktop_app_v1/view/components/interactive_loading_view.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +41,7 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
   bool _hasCompletedInitialLoad = false;
+  // ignore: unused_field
   bool _showSuccessAnimation = false;
   bool _canGoBack = false;
   bool _canGoForward = false;
@@ -313,6 +313,7 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
     }
   }
 
+  // ignore: unused_element
   void _handleTaskCompletion() async {
     // 1. Show the success overlay
     _safeSetState(() {

@@ -1,5 +1,4 @@
 import 'package:duoob_desktop_app_v1/utils/colors.dart';
-import 'package:duoob_desktop_app_v1/utils/constants.dart';
 import 'package:flutter/material.dart';
 
 class InfoDialog extends StatelessWidget {
