@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:duoob_desktop_app_v1/model/login_response_model.dart';
 import 'package:duoob_desktop_app_v1/model/user_profile_model.dart';
 import 'package:duoob_desktop_app_v1/services/api_services.dart';
@@ -51,11 +52,16 @@ class LoginProvider with ChangeNotifier {
         data['password'] = passEncyp;
       }
 
-      // ignore: unused_local_variable
       Map<String, String> headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': '~@#\$%^&()_+|}{P:"?><-=/-+."}',
+        'Authorization': '~@#\$%^&()_+|}{P:"?><-=/-+.',
       };
+
+      developer.log(
+        'URL: ${Constants.baseUrl}${Constants.apiLogin}\nBody: $data\nHeaders: $headers',
+        name: 'Login Request',
+      );
+
         response = await ApiServices.execute(method: apiMethod.post, url: Constants.apiLogin,data: data);
       }
 

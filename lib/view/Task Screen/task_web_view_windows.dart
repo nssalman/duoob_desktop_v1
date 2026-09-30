@@ -178,6 +178,49 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
     }
   }
 
+  /// Some ERP pages never navigate to a Success/Failure close URL — they
+  /// call a page-defined `closeme()` instead (originally meant to close a
+  /// popup window). The C# side toggles between two mutually exclusive
+  /// behaviours on submit:
+  ///   ScriptManager.RegisterStartupScript(this.Page, Page.GetType(), "text", "closeme()", true);
+  ///   //Response.Redirect("Resultpage.aspx");
+  /// `RegisterStartupScript` runs inside an UpdatePanel async postback, so
+  /// no navigation/onLoadStop event ever fires for it — and `closeme` itself
+  /// may be (re)defined at any point during the page's life, sometimes after
+  /// our first wrap attempt. A one-shot wrap can miss it entirely, which is
+  /// why some tasks never reported success. Poll and re-wrap continuously
+  /// instead of checking once, so whenever `closeme` shows up (or is
+  /// replaced by a later partial postback) it still reports success.
+  Future<void> _injectCloseMeHook(InAppWebViewController controller) async {
+    try {
+      await controller.evaluateJavascript(
+        source: '''
+        (function() {
+          function wrapIfNeeded() {
+            var fn = window.closeme;
+            if (typeof fn === 'function' && !fn.__duoobWrapped) {
+              var wrapped = function() {
+                try { window.flutter_inappwebview.callHandler('notifyClose'); } catch (e) {}
+                return fn.apply(this, arguments);
+              };
+              wrapped.__duoobWrapped = true;
+              window.closeme = wrapped;
+            }
+          }
+          wrapIfNeeded();
+          if (!window.__duoobCloseMePollStarted) {
+            window.__duoobCloseMePollStarted = true;
+            setInterval(wrapIfNeeded, 250);
+          }
+        })();
+      ''',
+      );
+    } catch (_) {
+      // The webview can be torn down mid-flight (e.g. window
+      // minimized while this was in progress) — nothing to do.
+    }
+  }
+
   Future<void> _updateNavigationState() async {
     final controller = _webViewController;
     if (controller == null || !mounted) return;
@@ -381,6 +424,10 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                     // Trigger as soon as Success/Failure URL is navigated to —
                     // the ASP.NET close page often 500s and never cleanly finishes.
                     _handleNavigationUrl(urlStr);
+                    // Arm the closeme() hook as early as possible so it is in
+                    // place before the page's own scripts (which may define
+                    // or call closeme) run.
+                    _injectCloseMeHook(controller);
                   },
                   onLoadStop: (controller, url) async {
                     log(url.toString(), name: 'onLoadStop');
@@ -390,32 +437,8 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                     });
                     await _updateNavigationState();
                     _handleNavigationUrl(url?.toString() ?? _activeUrl);
-                    // Some ERP pages never navigate to a Success/Failure close
-                    // URL — they call their own page-defined closeme() to
-                    // close the (originally popup) window instead. Wrap it so
-                    // calling it also reports success through notifyClose.
                     if (!mounted) return;
-                    try {
-                      await controller.evaluateJavascript(
-                        source: '''
-                        (function() {
-                          if (typeof window.closeme === 'function' && !window.__duoobCloseMeWrapped) {
-                            window.__duoobCloseMeWrapped = true;
-                            var originalCloseMe = window.closeme;
-                            window.closeme = function() {
-                              try {
-                                window.flutter_inappwebview.callHandler('notifyClose');
-                              } catch (e) {}
-                              return originalCloseMe.apply(this, arguments);
-                            };
-                          }
-                        })();
-                      ''',
-                      );
-                    } catch (_) {
-                      // The webview can be torn down mid-flight (e.g. window
-                      // minimized while this was in progress) — nothing to do.
-                    }
+                    await _injectCloseMeHook(controller);
                   },
                   onProgressChanged: (controller, progress) {
                     if (progress == 100) {
