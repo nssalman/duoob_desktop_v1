@@ -1,6 +1,9 @@
+import 'dart:collection';
+import 'dart:convert';
 import 'dart:developer';
 import 'package:duoob_desktop_app_v1/main.dart';
 import 'package:duoob_desktop_app_v1/services/download_services.dart';
+import 'package:duoob_desktop_app_v1/utils/constants.dart';
 import 'package:duoob_desktop_app_v1/view/components/interactive_loading_view.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +21,11 @@ class TaskWebViewWindows extends StatefulWidget {
   final List<String> loadingTips;
   final VoidCallback? onSubmissionSuccess;
 
+  /// Hides the embedded site's header, footer, navbar, and sidebar.
+  /// Used by the Dashboard tab, which opens the reports page directly.
+  /// My RAKP and task pages leave the site chrome visible.
+  final bool hideSiteChrome;
+
   const TaskWebViewWindows({
     super.key,
     this.url,
@@ -31,6 +39,7 @@ class TaskWebViewWindows extends StatefulWidget {
       'Loading your workspace…',
     ],
     this.onSubmissionSuccess,
+    this.hideSiteChrome = false,
   });
 
   @override
@@ -61,6 +70,52 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
 
   static bool get _isWindows =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
+  /// Injected only when [TaskWebViewWindows.hideSiteChrome] is set. It hides
+  /// the site header, footer, navbar, and sidebar on
+  /// [Constants.reportsDashboardUrl], and removes that hide on any other page.
+  static final UnmodifiableListView<UserScript> _initialUserScripts =
+      UnmodifiableListView<UserScript>([
+    UserScript(
+      source: _reportsChromeScript(),
+      injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+    ),
+  ]);
+
+  static String _reportsChromeScript() {
+    final dashboardPath =
+        Uri.parse(Constants.reportsDashboardUrl).path.toLowerCase();
+    return '''
+      (function () {
+        try {
+          var styleId = 'duoob-hide-reports-chrome';
+          var dashboardPath = ${jsonEncode(dashboardPath)};
+          var path = (location.pathname || '').toLowerCase();
+          var existing = document.getElementById(styleId);
+          if (path !== dashboardPath) {
+            if (existing && existing.parentNode) {
+              existing.parentNode.removeChild(existing);
+            }
+            return;
+          }
+          if (existing) return;
+          var style = document.createElement('style');
+          style.id = styleId;
+          style.textContent = [
+            'header, footer, .main-header, .main-footer, .navbar-custom-menu, aside.main-sidebar, .main-sidebar {',
+            '  display: none !important;',
+            '}',
+            '.content-wrapper, .right-side {',
+            '  margin-top: 0 !important;',
+            '  margin-left: 0 !important;',
+            '  padding-top: 0 !important;',
+            '}'
+          ].join('\\n');
+          (document.head || document.documentElement).appendChild(style);
+        } catch (e) {}
+      })();
+    ''';
+  }
 
   @override
   void initState() {
@@ -178,6 +233,87 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
     }
   }
 
+  /// ERP workflow buttons post back instead of navigating to a close URL.
+  /// Listen once per document, in the capture phase, so a click is seen even
+  /// after an UpdatePanel postback and when ASP.NET prefixes the client id.
+  /// The click is not cancelled — the server postback still runs.
+  Future<void> _injectActionButtonListener(
+    InAppWebViewController controller,
+  ) async {
+    try {
+      await controller.evaluateJavascript(source: _actionButtonListenerScript);
+    } catch (_) {
+      // The webview can be torn down mid-flight (e.g. window
+      // minimized while this was in progress) — nothing to do.
+    }
+  }
+
+  static const String _actionButtonListenerScript = r'''
+    (function () {
+      if (!document || document.__duoobActionButtonListener) return;
+      document.__duoobActionButtonListener = true;
+
+      var buttons = [
+        { id: 'ButtonChangeRequest', label: 'Send for Clarification' },
+        { id: 'BtnReject', label: 'Reject' },
+        { id: 'BtnApprove', label: 'Approve' },
+        { id: 'ButtonReSubmit', label: 'Re-Submit' }
+      ];
+
+      function fieldMatches(value, buttonId) {
+        if (!value) return false;
+        if (value === buttonId) return true;
+        return value.endsWith('_' + buttonId) || value.endsWith('$' + buttonId);
+      }
+
+      function visibleLabel(node) {
+        var tag = (node.tagName || '').toUpperCase();
+        if (tag === 'INPUT') {
+          return String(node.value || node.getAttribute('value') || '').trim();
+        }
+        return String(node.innerText || node.textContent || '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function matchButton(node) {
+        if (!node || node.nodeType !== 1) return null;
+        var id = node.id || '';
+        var name = node.getAttribute ? (node.getAttribute('name') || '') : '';
+        var tag = (node.tagName || '').toUpperCase();
+        var label = visibleLabel(node);
+        var labelEligible = tag === 'INPUT' || tag === 'BUTTON' ||
+          (node.classList && node.classList.contains('myButton'));
+        for (var i = 0; i < buttons.length; i++) {
+          var button = buttons[i];
+          if (fieldMatches(id, button.id) || fieldMatches(name, button.id) ||
+              (labelEligible && label === button.label)) {
+            return button;
+          }
+        }
+        return null;
+      }
+
+      document.addEventListener('click', function (event) {
+        var node = event.target;
+        while (node && node !== document) {
+          var match = matchButton(node);
+          if (match) {
+            try {
+              window.flutter_inappwebview.callHandler(
+                'notifyActionButton',
+                match.id,
+                match.label
+              );
+            } catch (e) {}
+            return;
+          }
+          node = node.parentElement;
+        }
+      }, true);
+    })();
+  ''';
+
   /// Some ERP pages never navigate to a Success/Failure close URL — they
   /// call a page-defined `closeme()` instead (originally meant to close a
   /// popup window). The C# side toggles between two mutually exclusive
@@ -215,6 +351,19 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
         })();
       ''',
       );
+    } catch (_) {
+      // The webview can be torn down mid-flight (e.g. window
+      // minimized while this was in progress) — nothing to do.
+    }
+  }
+
+  /// Re-applies the reports-dashboard chrome hide after the document exists.
+  /// The document-start user script covers the first paint; this covers
+  /// pages that rebuild their header after load.
+  Future<void> _syncReportsChrome(InAppWebViewController controller) async {
+    if (!widget.hideSiteChrome) return;
+    try {
+      await controller.evaluateJavascript(source: _reportsChromeScript());
     } catch (_) {
       // The webview can be torn down mid-flight (e.g. window
       // minimized while this was in progress) — nothing to do.
@@ -389,6 +538,8 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
               Positioned.fill(
                 child: InAppWebView(
                   webViewEnvironment: webViewEnvironment,
+                  initialUserScripts:
+                      widget.hideSiteChrome ? _initialUserScripts : null,
                   initialSettings: InAppWebViewSettings(
                     javaScriptEnabled: true,
                     useOnDownloadStart: true,
@@ -409,18 +560,43 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                         _triggerOverlay(true);
                       },
                     );
+                    controller.addJavaScriptHandler(
+                      handlerName: 'notifyActionButton',
+                      callback: (args) {
+                        // A matched workflow button already started the close.
+                        // Later Success/Failure redirects must not close again
+                        // or replace this animation with a loading state.
+                        if (_resultHandled) return;
+                        _resultHandled = true;
+                        log(
+                          'Workflow button clicked: $args',
+                          name: 'TaskWebView',
+                        );
+                        _triggerOverlay(true);
+                      },
+                    );
                     _updateNavigationState();
                   },
                   onUpdateVisitedHistory: (controller, url, isReload) {
                     _updateNavigationState();
                     _handleNavigationUrl(url?.toString());
+                    _syncReportsChrome(controller);
                   },
                   onLoadStart: (controller, url) {
                     final urlStr = url?.toString();
-                    _safeSetState(() {
-                      _isLoading = true;
-                      if (urlStr != null) _activeUrl = urlStr;
-                    });
+                    // A button click already owns the close. Keep the webview
+                    // mounted under the animation and don't cover it with the
+                    // postback loading state.
+                    if (_resultHandled) {
+                      if (urlStr != null) {
+                        _safeSetState(() => _activeUrl = urlStr);
+                      }
+                    } else {
+                      _safeSetState(() {
+                        _isLoading = true;
+                        if (urlStr != null) _activeUrl = urlStr;
+                      });
+                    }
                     // Trigger as soon as Success/Failure URL is navigated to —
                     // the ASP.NET close page often 500s and never cleanly finishes.
                     _handleNavigationUrl(urlStr);
@@ -428,17 +604,24 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                     // place before the page's own scripts (which may define
                     // or call closeme) run.
                     _injectCloseMeHook(controller);
+                    _injectActionButtonListener(controller);
                   },
                   onLoadStop: (controller, url) async {
                     log(url.toString(), name: 'onLoadStop');
-                    _safeSetState(() {
-                      _isLoading = false;
-                      _hasCompletedInitialLoad = true;
-                    });
+                    if (!_resultHandled) {
+                      _safeSetState(() {
+                        _isLoading = false;
+                        _hasCompletedInitialLoad = true;
+                      });
+                    }
                     await _updateNavigationState();
                     _handleNavigationUrl(url?.toString() ?? _activeUrl);
                     if (!mounted) return;
                     await _injectCloseMeHook(controller);
+                    if (!mounted) return;
+                    await _injectActionButtonListener(controller);
+                    if (!mounted) return;
+                    await _syncReportsChrome(controller);
                   },
                   onProgressChanged: (controller, progress) {
                     if (progress == 100) {
@@ -447,6 +630,7 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                         _hasCompletedInitialLoad = true;
                       });
                       _handleNavigationUrl(_activeUrl);
+                      _syncReportsChrome(controller);
                     }
                   },
                   onReceivedError: (controller, request, error) {
@@ -496,7 +680,9 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
 
               // Loading: block only for first load (or when requested).
               // After that, keep the page visible with a thin progress bar.
-              if (_isLoading &&
+              // Once a close animation has started, never cover it.
+              if (_currentResult == TaskResult.none &&
+                  _isLoading &&
                   (widget.blockUiWhileLoading || !_hasCompletedInitialLoad))
                 Positioned.fill(
                   child: InteractiveLoadingView(
@@ -504,7 +690,7 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                     tips: widget.loadingTips,
                   ),
                 )
-              else if (_isLoading)
+              else if (_currentResult == TaskResult.none && _isLoading)
                 const Positioned(
                   top: 0,
                   left: 0,

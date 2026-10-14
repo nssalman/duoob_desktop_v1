@@ -12,6 +12,7 @@ class ReportWorkspace extends StatelessWidget {
       child: TaskWebViewWindows(
         key: const ValueKey(Constants.reportsDashboardUrl),
         url: Constants.reportsDashboardUrl,
+        hideSiteChrome: true,
       ),
     );
   }

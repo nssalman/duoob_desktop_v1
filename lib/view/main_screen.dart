@@ -170,7 +170,7 @@ class _AppSidebar extends StatelessWidget {
       selectedIcon: Icons.task_alt_rounded,
     ),
     _SidebarItem(
-      label: 'Reports',
+      label: 'Dashboard',
       icon: Icons.analytics_outlined,
       selectedIcon: Icons.analytics_rounded,
     ),
