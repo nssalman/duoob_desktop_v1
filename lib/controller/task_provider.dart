@@ -465,18 +465,21 @@ class TaskProvider with ChangeNotifier {
         return;
       }
 
-      String token = responseModel.accessToken!;
-      // Use userId or uid based on your model's field name
       String userId = userModel.userId ?? '';
-
       log("Fetching D365 tasks for User: $userId");
 
-      // 2. Execute API Call
-      var response = await ApiServices.execute(
-        method: apiMethod.get,
-        accessToken: token,
-        url: '${Constants.apiGetD365Task}?usersid=$userId',
-      );
+      // UAT hits the sandbox list with no bearer token.
+      final response = Constants.isUat
+          ? await ApiServices.execute(
+              method: apiMethod.get,
+              url: Constants.uatD365TaskListUrl,
+              absoluteUrl: true,
+            )
+          : await ApiServices.execute(
+              method: apiMethod.get,
+              accessToken: responseModel.accessToken!,
+              url: '${Constants.apiGetD365Task}?usersid=$userId',
+            );
 
       // 3. Parse and Store Data
       if (response != null) {

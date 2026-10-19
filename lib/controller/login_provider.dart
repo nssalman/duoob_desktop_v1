@@ -34,8 +34,32 @@ class LoginProvider with ChangeNotifier {
       FocusScope.of(context).requestFocus(FocusNode());
 
       var response;
+      final bool isUatLogin = microsoftCode == null && Constants.isUat;
       if (microsoftCode != null) {
         response = await ApiServices.execute(method: apiMethod.get, url:  Constants.apiMicrosoftLogin + '?code=$microsoftCode');
+      } else if (isUatLogin) {
+        var bytes = utf8.encode(password!);
+        var passEncyp = base64Encode(bytes);
+
+        Map<String, String> data = {
+          "username": username!,
+          "password": passEncyp,
+          "scope": 'StaffApp',
+        };
+
+        developer.log(
+          'URL: ${Constants.uatLoginUrl}\nBody: $data',
+          name: 'Login Request (UAT)',
+        );
+
+        response = await ApiServices.execute(
+          method: apiMethod.post,
+          url: Constants.uatLoginUrl,
+          data: data,
+          isJson: true,
+          isHeaderEmpty: true,
+          absoluteUrl: true,
+        );
       } else {
         var bytes = utf8.encode(password!);
       var passEncyp = base64Encode(bytes);
@@ -83,7 +107,9 @@ class LoginProvider with ChangeNotifier {
         return;
       }
 
-      final loginResponse = LoginResponseModel.fromJson(response);
+      final loginResponse = isUatLogin
+          ? LoginResponseModel.fromUatJson(Map<String, dynamic>.from(response))
+          : LoginResponseModel.fromJson(response);
 
       if (!_hasValidAccessToken(loginResponse)) {
         _showErrorDialog(
@@ -147,7 +173,7 @@ class LoginProvider with ChangeNotifier {
       }
     }
 
-    final token = response['access_token'];
+    final token = response['access_token'] ?? response['accessToken'];
     return token == null || token.toString().isEmpty || token.toString() == 'null';
   }
 

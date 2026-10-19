@@ -17,6 +17,7 @@ class WebViewSessionService {
     'https://rpsmart.com',
     'https://www.rpsmart.com',
     'https://rakp.rpsmart.com',
+    'http://172.30.11.252',
     'https://api.rpsmart.com',
     'https://apiv2.rpsmart.com',
     'https://rakp-prod.operations.uae.dynamics.com',

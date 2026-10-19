@@ -542,6 +542,12 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                       widget.hideSiteChrome ? _initialUserScripts : null,
                   initialSettings: InAppWebViewSettings(
                     javaScriptEnabled: true,
+                    // Needed for window.open() popups, e.g. the
+                    // "Sign in with Microsoft" popup on the Power BI
+                    // dashboard. Without these the popup is created as a
+                    // blank window nothing attaches to (white about:blank).
+                    supportMultipleWindows: true,
+                    javaScriptCanOpenWindowsAutomatically: true,
                     useOnDownloadStart: true,
                     mediaPlaybackRequiresUserGesture: false,
                     allowsInlineMediaPlayback: true,
@@ -648,20 +654,23 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                     _handleNavigationUrl(request.url.toString());
                   },
 
-                  // onCreateWindow: (controller, createWindowRequest) async {
-                  //   await Navigator.push(
-                  //     context,
-                  //     MaterialPageRoute(
-                  //       builder: (context) => NewTaskViewScreen(
-                  //         createWindowRequest: createWindowRequest,
-                  //       ),
-                  //     ),
-                  //   );
-                  //   // await controller.reload();
-                  //   // This is crucial: Returning `true` signals that your app
-                  //   // has handled the request and the WebView shouldn't open a new native window.
-                  //   return true;
-                  // },
+                  // Pages open popups with window.open() — most importantly
+                  // the Microsoft sign-in popup used by the Power BI
+                  // dashboard. Attach a child webview to the popup via its
+                  // windowId so WebView2 drives the navigation, the popup
+                  // shares the opener's session, and the page's own script
+                  // can close it when sign-in completes.
+                  onCreateWindow: (controller, createWindowAction) async {
+                    if (!mounted) return false;
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (dialogContext) => _PopupWebViewDialog(
+                        createWindowAction: createWindowAction,
+                      ),
+                    );
+                    return true;
+                  },
                   onDownloadStart: (controller, url) async {
                     // final FileDownloadService _downloader =
                     //     FileDownloadService();
@@ -783,6 +792,67 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Hosts a window.open() popup (e.g. the Microsoft sign-in window) inside a
+/// dialog. The webview is attached to the popup through [windowId], which
+/// keeps the `window.opener` link alive — required for auth popups to report
+/// the result back and close themselves (handled by [onCloseWindow]).
+class _PopupWebViewDialog extends StatelessWidget {
+  const _PopupWebViewDialog({required this.createWindowAction});
+
+  final CreateWindowAction createWindowAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: (size.width * 0.6).clamp(480.0, 900.0),
+        height: (size.height * 0.8).clamp(480.0, 900.0),
+        child: Column(
+          children: [
+            Material(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Row(
+                children: [
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Sign in',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: InAppWebView(
+                webViewEnvironment: webViewEnvironment,
+                windowId: createWindowAction.windowId,
+                initialSettings: InAppWebViewSettings(
+                  javaScriptEnabled: true,
+                  javaScriptCanOpenWindowsAutomatically: true,
+                  supportMultipleWindows: true,
+                ),
+                onCloseWindow: (controller) {
+                  final navigator = Navigator.of(context);
+                  if (navigator.canPop()) navigator.pop();
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

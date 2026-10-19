@@ -21,27 +21,31 @@ class ApiServices {
       bool isJson = false,
       bool isQueryParamsPost = false,
       bool isMultipartFromPath = false,
-      String fileName = ''}) async {
+      String fileName = '',
+      bool absoluteUrl = false}) async {
     developer.log(url.toString());
     try {
       var response;
       switch (method) {
         case apiMethod.get:
-           developer.log(
-              '${isCoreApi ? Constants.coreBaseUrl : Constants.baseUrl}$url',
-              name: 'Request');
-          response = await client.get(
-              data != null
+          final requestUri = absoluteUrl
+              ? Uri.parse(url)
+              : data != null
                   ? Uri.https(Constants.domain, url, data)
                   : Uri.parse(
                       '${isCoreApi ? Constants.coreBaseUrl : Constants.baseUrl}$url',
-                    ),
+                    );
+          developer.log(requestUri.toString(), name: 'Request');
+          response = await client.get(
+              requestUri,
               headers: accessToken != null
                   ? {
                       'Accept': 'application/json',
                       'Authorization': 'Bearer $accessToken',
                     }
-                  : {});
+                  : {
+                      'Accept': 'application/json',
+                    });
           break;
         case apiMethod.multipart:
           var request = http.MultipartRequest(
@@ -95,7 +99,9 @@ class ApiServices {
           response = await client.post(
               isQueryParamsPost
                   ? Uri.https(Constants.domain, url, data)
-                  : Uri.parse('${Constants.baseUrl}$url'),
+                  : Uri.parse(
+                      absoluteUrl ? url : '${Constants.baseUrl}$url',
+                    ),
               body: isQueryParamsPost
                   ? {}
                   : isJson

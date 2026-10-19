@@ -4,6 +4,7 @@ import 'package:duoob_desktop_app_v1/controller/task_provider.dart';
 import 'package:duoob_desktop_app_v1/model/d365_task_model.dart';
 import 'package:duoob_desktop_app_v1/model/task_model.dart';
 import 'package:duoob_desktop_app_v1/utils/colors.dart';
+import 'package:duoob_desktop_app_v1/utils/constants.dart';
 import 'package:duoob_desktop_app_v1/utils/theme_colors.dart';
 import 'package:duoob_desktop_app_v1/view/components/custom_dialogue.dart';
 import 'package:duoob_desktop_app_v1/view/components/d365_task_tile.dart';
@@ -185,7 +186,7 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
     if (task.notificationId != null) {
       setState(() {
         _activeUrl =
-            'https://rakp.rpsmart.com/d365emailnotifications/D365FnOWorkflowsubmission.aspx?NotificationID=${task.notificationId}';
+            '${Constants.d365WorkflowSubmissionUrl}?NotificationID=${task.notificationId}';
         _selectedErpTask = task;
         _selectedEmployeeKey = null;
       });
@@ -513,7 +514,7 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection>
 
     final urlAction = isApprove ? 'Approve' : 'Reject';
     final url =
-        'https://rakp.rpsmart.com/d365emailnotifications/D365FnoWorkflowMultiSubmission.aspx?NotificationId=${ids.join(',')}&Action=$urlAction';
+        '${Constants.d365WorkflowMultiSubmissionUrl}?NotificationId=${ids.join(',')}&Action=$urlAction';
 
     context
         .findAncestorStateOfType<_TaskWorkspaceState>()

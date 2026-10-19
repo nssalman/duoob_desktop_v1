@@ -33,11 +33,34 @@ class Constants{
 
   static const String kD365Url = 'https://rakp-prod.operations.uae.dynamics.com/';
 
-  static const String reportsDashboardUrl =
-      'https://rakp.rpsmart.com/version2/mydashboard.aspx';
+  /// `prod` (default) or `uat`. Set with `--dart-define=APP_ENV=uat`.
+  static const String appEnv =
+      String.fromEnvironment('APP_ENV', defaultValue: 'prod');
+  static const bool isUat = appEnv == 'uat';
 
-  static const String myRakpUrl =
-      'https://rakp.rpsmart.com/version2/index.aspx';
+  static const String reportsDashboardUrl = isUat
+      ? 'https://uat-rakp.rpsmart.com/version2/mydashboard.aspx'
+      : 'https://rakp.rpsmart.com/version2/mydashboard.aspx';
+
+  static const String myRakpUrl = isUat
+      ? 'https://uat-rakp.rpsmart.com/version2/index.aspx'
+      : 'https://rakp.rpsmart.com/version2/index.aspx';
+
+  static const String d365WorkflowSubmissionUrl = isUat
+      ? 'https://uat-rakp.rpsmart.com/d365emailnotifications/D365FnOWorkflowsubmission.aspx'
+      : 'https://rakp.rpsmart.com/d365emailnotifications/D365FnOWorkflowsubmission.aspx';
+
+  static const String d365WorkflowMultiSubmissionUrl = isUat
+      ? 'https://uat-rakp.rpsmart.com/d365emailnotifications/D365FnoWorkflowMultiSubmission.aspx'
+      : 'https://rakp.rpsmart.com/d365emailnotifications/D365FnoWorkflowMultiSubmission.aspx';
+
+  /// UAT login endpoint (absolute URL, JSON payload).
+  static const String uatLoginUrl =
+      'https://sandbox.rpsmart.com/rak-api/api/Auth/token';
+
+  /// Unauthenticated ERP task list used only by the UAT launch.
+  static const String uatD365TaskListUrl =
+      'https://sandbox.rpsmart.com/rak-api/api/StaffUser/getMyD365Tasks?usersid=alzaabi';
 
   static const String copilotBackendBaseUrl = 'https://apiv2.rpsmart.com';
   static const String copilotScope =

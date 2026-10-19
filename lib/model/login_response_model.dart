@@ -45,6 +45,23 @@ class LoginResponseModel {
     expires: json[".expires"],
   );
 
+  /// Maps the UAT login response (sandbox Auth/token) to the same model
+  /// stored in preferences. Fields not present in the response are set to
+  /// null/empty/0.
+  factory LoginResponseModel.fromUatJson(Map<String, dynamic> json) =>
+      LoginResponseModel(
+        accessToken: json["accessToken"],
+        tokenType: json["tokenType"],
+        expiresIn: json["expiresIn"]?.toString() ?? '0',
+        userName: json["userName"],
+        userId: json["uid"]?.toString() ?? '',
+        language: json["language"] ?? '',
+        clientId: '',
+        refreshToken: '',
+        issued: null,
+        expires: null,
+      );
+
   Map<String, dynamic> toJson() => {
     "access_token": accessToken,
     "token_type": tokenType,
