@@ -32,6 +32,12 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Newer MSVC toolsets (Visual Studio 2026 / v14.5x) turn the deprecated
+# <experimental/coroutine> header into a hard compile error. The
+# flutter_inappwebview_windows plugin (via the WIL package) still includes it,
+# so silence the error for all targets, including plugins added below.
+add_definitions(-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by

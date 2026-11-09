@@ -30,6 +30,11 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
   String? _selectedEmployeeKey;
   String? _activeUrl;
 
+  /// Notification ids of the current ERP multi Approve/Reject submission
+  /// (set while that webview is open), so a successful close can hide just
+  /// those tasks instead of the normal immediate list refresh.
+  List<String>? _pendingBulkNotificationIds;
+
   late TabController _tabController;
   late MultiSplitViewController _multiSplitController;
 
@@ -40,10 +45,7 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
     super.initState();
     _tabController = TabController(length: tabs.length, vsync: this);
     _multiSplitController = MultiSplitViewController(
-      areas: [
-        Area(size: 420, min: 340, max: 560),
-        Area(flex: 1),
-      ],
+      areas: [Area(size: 420, min: 340, max: 560), Area(flex: 1)],
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TaskProvider>().getTaskListPermission();
@@ -63,6 +65,7 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
       _activeUrl = null;
       _selectedErpTask = null;
       _selectedEmployeeKey = null;
+      _pendingBulkNotificationIds = null;
     }
 
     if (oldWidget.suspendWebView && !widget.suspendWebView) {
@@ -121,29 +124,35 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: Column(
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            _buildHeader(context, provider),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-              child: _buildSegmentedTabs(provider),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                child: TabBarView(
-                  controller: _tabController,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    ERPTaskListSection(
-                      activeNotificationId: _selectedErpTask?.notificationId,
-                    ),
-                    EmployeeTaskListSection(
-                      activeTaskKey: _selectedEmployeeKey,
-                    ),
-                  ],
+            Column(
+              children: [
+                _buildHeader(context, provider),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                  child: _buildSegmentedTabs(provider),
                 ),
-              ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                    child: TabBarView(
+                      controller: _tabController,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        ERPTaskListSection(
+                          activeNotificationId:
+                              _selectedErpTask?.notificationId,
+                        ),
+                        EmployeeTaskListSection(
+                          activeTaskKey: _selectedEmployeeKey,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -180,9 +189,8 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
   void _handleERPWebRedirect(
     BuildContext context,
     TaskProvider provider,
-    int index,
+    D365TaskListModel task,
   ) {
-    final task = provider.d365TaskList[index];
     if (task.notificationId != null) {
       setState(() {
         _activeUrl =
@@ -193,22 +201,22 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
     }
   }
 
-  void _openErpBulkUrl(String url) {
+  void _openErpBulkUrl(String url, List<String> notificationIds) {
     setState(() {
       _activeUrl = url;
       _selectedEmployeeKey = null;
+      _pendingBulkNotificationIds = notificationIds;
     });
   }
 
   void _suspendBulkWebViewIfOpen() {
-    final isBulkOpen = _activeUrl?.contains(
-          'D365FnoWorkflowMultiSubmission',
-        ) ==
-        true;
+    final isBulkOpen =
+        _activeUrl?.contains('D365FnoWorkflowMultiSubmission') == true;
     if (!isBulkOpen) return;
     setState(() {
       _activeUrl = null;
       _selectedErpTask = null;
+      _pendingBulkNotificationIds = null;
     });
   }
 
@@ -235,9 +243,14 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
   void _handleTaskSubmissionSuccess() {
     if (!mounted) return;
     final provider = context.read<TaskProvider>();
+    final bulkIds = _pendingBulkNotificationIds;
     provider.clearSelection();
     if (_tabController.index == 0) {
-      provider.getd365TaskList();
+      if (bulkIds != null && bulkIds.isNotEmpty) {
+        provider.hideErpTasks(bulkIds);
+      } else {
+        provider.getd365TaskList();
+      }
     } else {
       provider.getTaskListPermission();
     }
@@ -245,17 +258,21 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
       _activeUrl = null;
       _selectedErpTask = null;
       _selectedEmployeeKey = null;
+      _pendingBulkNotificationIds = null;
     });
   }
 
   Widget _buildHeader(BuildContext context, TaskProvider provider) {
     final c = context.colors;
     final isErpTab = _tabController.index == 0;
-    final isLoading =
-        isErpTab ? provider.isDD365Loading : provider.isTaskListLoading;
-    final erpCount = provider.d365TaskList.length;
-    final employeeCount = provider.userTaskMap.values
-        .fold<int>(0, (sum, list) => sum + list.length);
+    final isLoading = isErpTab
+        ? provider.isDD365Loading
+        : provider.isTaskListLoading;
+    final erpCount = provider.visibleD365TaskList.length;
+    final employeeCount = provider.userTaskMap.values.fold<int>(
+      0,
+      (sum, list) => sum + list.length,
+    );
 
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 16, 10, 12),
@@ -263,10 +280,7 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            c.brand.withValues(alpha: 0.06),
-            Colors.transparent,
-          ],
+          colors: [c.brand.withValues(alpha: 0.06), Colors.transparent],
         ),
       ),
       child: Row(
@@ -292,9 +306,9 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
                 Text(
                   'My Tasks',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -348,9 +362,11 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
 
   Widget _buildSegmentedTabs(TaskProvider provider) {
     final c = context.colors;
-    final erpCount = provider.d365TaskList.length;
-    final employeeCount = provider.userTaskMap.values
-        .fold<int>(0, (sum, list) => sum + list.length);
+    final erpCount = provider.visibleD365TaskList.length;
+    final employeeCount = provider.userTaskMap.values.fold<int>(
+      0,
+      (sum, list) => sum + list.length,
+    );
     final counts = [erpCount, employeeCount];
 
     return ClipRRect(
@@ -362,9 +378,7 @@ class _TaskWorkspaceState extends State<TaskWorkspace>
           decoration: BoxDecoration(
             color: c.brand.withValues(alpha: 0.07),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: c.brand.withValues(alpha: 0.08),
-            ),
+            border: Border.all(color: c.brand.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: List.generate(tabs.length, (tabIndex) {
@@ -485,8 +499,9 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection>
     TaskProvider provider, {
     required bool isApprove,
   }) async {
-    final ids =
-        D365TaskListModel.getSelectedNotificationIds(provider.d365TaskList);
+    final ids = D365TaskListModel.getSelectedNotificationIds(
+      provider.visibleD365TaskList,
+    );
     if (ids.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select any work items!')),
@@ -516,9 +531,10 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection>
     final url =
         '${Constants.d365WorkflowMultiSubmissionUrl}?NotificationId=${ids.join(',')}&Action=$urlAction';
 
-    context
-        .findAncestorStateOfType<_TaskWorkspaceState>()
-        ?._openErpBulkUrl(url);
+    context.findAncestorStateOfType<_TaskWorkspaceState>()?._openErpBulkUrl(
+      url,
+      ids,
+    );
   }
 
   @override
@@ -530,7 +546,9 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection>
           return const _TaskListSkeleton();
         }
 
-        if (provider.d365TaskList.isEmpty) {
+        final visibleTasks = provider.visibleD365TaskList;
+
+        if (visibleTasks.isEmpty) {
           return _TaskEmptyState(
             icon: Icons.inventory_2_outlined,
             title: 'No ERP tasks',
@@ -540,8 +558,9 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection>
         }
 
         final hasSelection = provider.checkForSelection();
-        final selectedCount =
-            provider.d365TaskList.where((task) => task.isSelected).length;
+        final selectedCount = visibleTasks
+            .where((task) => task.isSelected)
+            .length;
         final showSelectionUi = _selectionMode || hasSelection;
 
         return Column(
@@ -552,12 +571,10 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection>
                   ? _ErpSelectionBar(
                       key: const ValueKey('selection-bar'),
                       selectedCount: selectedCount,
-                      totalCount: provider.d365TaskList.length,
+                      totalCount: visibleTasks.length,
                       isAllSelected: provider.isAllSelect,
-                      onSelectAll: () => _onSelectionChanged(
-                        provider,
-                        provider.selectAll,
-                      ),
+                      onSelectAll: () =>
+                          _onSelectionChanged(provider, provider.selectAll),
                       onClear: () => _exitSelectionMode(provider),
                       onToggleAll: () => _onSelectionChanged(
                         provider,
@@ -582,14 +599,15 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection>
                         top: 4,
                         bottom: hasSelection ? 84 : 8,
                       ),
-                      itemCount: provider.d365TaskList.length,
+                      itemCount: visibleTasks.length,
                       itemBuilder: (context, index) {
-                        final task = provider.d365TaskList[index];
+                        final task = visibleTasks[index];
                         return D365tasktile(
                           task: task,
                           isSelected: task.isSelected,
                           selectionMode: showSelectionUi,
-                          isActive: !showSelectionUi &&
+                          isActive:
+                              !showSelectionUi &&
                               widget.activeNotificationId != null &&
                               widget.activeNotificationId ==
                                   task.notificationId,
@@ -597,16 +615,20 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection>
                             if (!_selectionMode) _enterSelectionMode();
                             _onSelectionChanged(
                               provider,
-                              () => provider.toggleSelection(index),
+                              () => provider.toggleSelection(task),
                             );
                           },
                           onTapLink: showSelectionUi
                               ? null
                               : () => context
-                                  .findAncestorStateOfType<
-                                      _TaskWorkspaceState>()
-                                  ?._handleERPWebRedirect(
-                                      context, provider, index),
+                                    .findAncestorStateOfType<
+                                      _TaskWorkspaceState
+                                    >()
+                                    ?._handleERPWebRedirect(
+                                      context,
+                                      provider,
+                                      task,
+                                    ),
                         );
                       },
                     ),
@@ -618,8 +640,7 @@ class _ERPTaskListSectionState extends State<ERPTaskListSection>
                     child: AnimatedSlide(
                       duration: const Duration(milliseconds: 220),
                       curve: Curves.easeOutCubic,
-                      offset:
-                          hasSelection ? Offset.zero : const Offset(0, 1.2),
+                      offset: hasSelection ? Offset.zero : const Offset(0, 1.2),
                       child: AnimatedOpacity(
                         duration: const Duration(milliseconds: 180),
                         opacity: hasSelection ? 1 : 0,
@@ -874,8 +895,7 @@ class _EmployeeTaskListSectionState extends State<EmployeeTaskListSection>
                   ...tasks.map(
                     (task) => TaskTile(
                       task: task,
-                      isActive:
-                          widget.activeTaskKey == _employeeTaskKey(task),
+                      isActive: widget.activeTaskKey == _employeeTaskKey(task),
                       onPressed: () {
                         final parentState = context
                             .findAncestorStateOfType<_TaskWorkspaceState>();

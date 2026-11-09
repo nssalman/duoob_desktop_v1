@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:developer';
@@ -76,15 +77,16 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
   /// [Constants.reportsDashboardUrl], and removes that hide on any other page.
   static final UnmodifiableListView<UserScript> _initialUserScripts =
       UnmodifiableListView<UserScript>([
-    UserScript(
-      source: _reportsChromeScript(),
-      injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-    ),
-  ]);
+        UserScript(
+          source: _reportsChromeScript(),
+          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+        ),
+      ]);
 
   static String _reportsChromeScript() {
-    final dashboardPath =
-        Uri.parse(Constants.reportsDashboardUrl).path.toLowerCase();
+    final dashboardPath = Uri.parse(
+      Constants.reportsDashboardUrl,
+    ).path.toLowerCase();
     return '''
       (function () {
         try {
@@ -410,8 +412,9 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
   Widget _buildNavigationBar(BuildContext context) {
     return Material(
       elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest
-          .withValues(alpha: 0.65),
+      color: Theme.of(
+        context,
+      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(
@@ -426,12 +429,12 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
             children: [
               IconButton(
                 tooltip: 'Back',
-                onPressed: _canGoBack ? _goBack : null,
+                onPressed: !_canGoBack ? null : _goBack,
                 icon: const Icon(Icons.arrow_back_rounded),
               ),
               IconButton(
                 tooltip: 'Forward',
-                onPressed: _canGoForward ? _goForward : null,
+                onPressed: !_canGoForward ? null : _goForward,
                 icon: const Icon(Icons.arrow_forward_rounded),
               ),
               IconButton(
@@ -442,13 +445,17 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
               const SizedBox(width: 8),
               Expanded(
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: Theme.of(context).dividerColor.withValues(alpha: 0.8),
+                      color: Theme.of(
+                        context,
+                      ).dividerColor.withValues(alpha: 0.8),
                     ),
                   ),
                   child: Text(
@@ -456,8 +463,8 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ),
@@ -468,7 +475,10 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
     );
   }
 
-  /// Central logic to handle animations and clearing the view
+  /// Central logic to handle animations and clearing the view. A successful
+  /// multi Approve/Reject gets the same short success handling as a single
+  /// task — the ERP task list hides the processed items instead of this
+  /// view blocking on a long wait screen.
   void _triggerOverlay(bool isSuccess) async {
     _safeSetState(() {
       _currentResult = isSuccess ? TaskResult.success : TaskResult.failure;
@@ -477,6 +487,11 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
 
     await Future.delayed(const Duration(milliseconds: 2500));
 
+    if (!mounted) return;
+    await _closeAfterResult(isSuccess);
+  }
+
+  Future<void> _closeAfterResult(bool isSuccess) async {
     if (!mounted) return;
 
     if (isSuccess && widget.refreshUrlOnSuccess && widget.url != null) {
@@ -538,8 +553,9 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
               Positioned.fill(
                 child: InAppWebView(
                   webViewEnvironment: webViewEnvironment,
-                  initialUserScripts:
-                      widget.hideSiteChrome ? _initialUserScripts : null,
+                  initialUserScripts: widget.hideSiteChrome
+                      ? _initialUserScripts
+                      : null,
                   initialSettings: InAppWebViewSettings(
                     javaScriptEnabled: true,
                     // Needed for window.open() popups, e.g. the
@@ -746,8 +762,9 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
           end: Alignment.bottomRight,
           colors: [
             Theme.of(context).colorScheme.surface,
-            Theme.of(context).colorScheme.surfaceContainerHighest
-                .withValues(alpha: 0.35),
+            Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
           ],
         ),
       ),
@@ -761,10 +778,9 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                 width: 88,
                 height: 88,
                 decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: 0.08),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -777,18 +793,18 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
               Text(
                 'Task workspace',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
-                    ),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Select a task from the list to open its workflow details here.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      height: 1.4,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  height: 1.4,
+                ),
               ),
             ],
           ),

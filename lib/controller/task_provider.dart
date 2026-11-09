@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:duoob_desktop_app_v1/model/d365_task_model.dart';
@@ -10,8 +11,13 @@ import 'package:duoob_desktop_app_v1/services/user_repository.dart';
 import 'package:duoob_desktop_app_v1/utils/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TaskProvider with ChangeNotifier {
+  TaskProvider() {
+    _restoreHiddenErpTasks();
+  }
+
   // --- Repository ---
   final UserRepository userRepository = UserRepository();
 
@@ -35,9 +41,23 @@ class TaskProvider with ChangeNotifier {
   Map<TaskRightsModel, List<TaskModel>> userTaskMap = {};
   UserProfileModel? userProfileModelView;
 
+  // --- ERP hidden tasks ---
+  // notificationId -> epoch ms it should stay hidden until. Set right after a
+  // successful multi Approve/Reject so the just-processed items disappear
+  // from the ERP list immediately instead of waiting for D365 to catch up.
+  static const String _hiddenErpPrefsKey = 'erp_hidden_notification_until';
+  final Map<String, int> _hiddenErpUntil = {};
+  Timer? _hiddenErpTimer;
+
   // --- Device Info ---
   // ignore: unused_field
   String? _deviceId, _manufacturer, _platform, _version, _model;
+
+  @override
+  void dispose() {
+    _hiddenErpTimer?.cancel();
+    super.dispose();
+  }
 
   // --- UI Actions ---
   void switchView() {
@@ -494,14 +514,24 @@ class TaskProvider with ChangeNotifier {
     }
   }
 
-  void toggleSelection(int index) {
-    d365TaskList[index].isSelected = !d365TaskList[index].isSelected;
-    isAllSelect = d365TaskList.every((e) => e.isSelected);
+  /// [d365TaskList] with any notification currently hidden (just processed
+  /// via a multi Approve/Reject, see [hideErpTasks]) filtered out.
+  List<D365TaskListModel> get visibleD365TaskList {
+    if (_hiddenErpUntil.isEmpty) return d365TaskList;
+    return d365TaskList
+        .where((task) => !_hiddenErpUntil.containsKey(task.notificationId))
+        .toList();
+  }
+
+  void toggleSelection(D365TaskListModel task) {
+    task.isSelected = !task.isSelected;
+    final visible = visibleD365TaskList;
+    isAllSelect = visible.isNotEmpty && visible.every((e) => e.isSelected);
     notifyListeners();
   }
 
   void selectAll() {
-    for (var element in d365TaskList) {
+    for (var element in visibleD365TaskList) {
       element.isSelected = true;
     }
     isAllSelect = true;
@@ -534,10 +564,113 @@ class TaskProvider with ChangeNotifier {
     _mytask = null;
     userTaskMap.clear();
     userProfileModelView = null;
+    _hiddenErpTimer?.cancel();
+    _hiddenErpUntil.clear();
+    unawaited(_persistHiddenErpTasks());
     notifyListeners();
   }
 
   bool checkForSelection() {
-    return d365TaskList.any((e) => e.isSelected);
+    return visibleD365TaskList.any((e) => e.isSelected);
+  }
+
+  /// Hides [notificationIds] from the ERP list right after a successful
+  /// multi Approve/Reject, instead of blocking on a long wait screen while
+  /// D365 processes them. Each id stays hidden until
+  /// `now + 5s * notificationIds.length + 20s`, then [_onHiddenErpExpiry]
+  /// refreshes the list from the API — an id D365 still returns becomes
+  /// visible again.
+  void hideErpTasks(List<String> notificationIds) {
+    if (notificationIds.isEmpty) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final expiry = now + (5000 * notificationIds.length) + 20000;
+    for (final id in notificationIds) {
+      final existing = _hiddenErpUntil[id];
+      _hiddenErpUntil[id] = (existing == null || existing < expiry)
+          ? expiry
+          : existing;
+    }
+    notifyListeners();
+    _logHiddenErpTasks('after hide');
+    unawaited(_persistHiddenErpTasks());
+    _scheduleHiddenErpTimer();
+  }
+
+  Future<void> _restoreHiddenErpTasks() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_hiddenErpPrefsKey);
+      if (raw == null || raw.isEmpty) return;
+
+      final decoded = json.decode(raw) as Map<String, dynamic>;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _hiddenErpUntil
+        ..clear()
+        ..addEntries(
+          decoded.entries
+              .map((e) => MapEntry(e.key, (e.value as num).toInt()))
+              .where((e) => e.value > now),
+        );
+
+      if (_hiddenErpUntil.isEmpty) {
+        await prefs.remove(_hiddenErpPrefsKey);
+      } else {
+        await _persistHiddenErpTasks(prefs: prefs);
+      }
+      _logHiddenErpTasks('after restore');
+      notifyListeners();
+      _scheduleHiddenErpTimer();
+    } catch (e) {
+      log('Error restoring hidden ERP tasks: $e', name: 'HiddenTasks');
+    }
+  }
+
+  void _scheduleHiddenErpTimer() {
+    _hiddenErpTimer?.cancel();
+    if (_hiddenErpUntil.isEmpty) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final soonest = _hiddenErpUntil.values.reduce((a, b) => a < b ? a : b);
+    final delayMs = soonest - now;
+    _hiddenErpTimer = Timer(
+      Duration(milliseconds: delayMs > 0 ? delayMs : 0),
+      _onHiddenErpExpiry,
+    );
+  }
+
+  Future<void> _onHiddenErpExpiry() async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _hiddenErpUntil.removeWhere((_, expiry) => expiry <= now);
+    await _persistHiddenErpTasks();
+    _logHiddenErpTasks('after expiry clear');
+    notifyListeners();
+    await getd365TaskList();
+    _scheduleHiddenErpTimer();
+  }
+
+  Future<void> _persistHiddenErpTasks({SharedPreferences? prefs}) async {
+    final p = prefs ?? await SharedPreferences.getInstance();
+    if (_hiddenErpUntil.isEmpty) {
+      await p.remove(_hiddenErpPrefsKey);
+    } else {
+      await p.setString(_hiddenErpPrefsKey, json.encode(_hiddenErpUntil));
+    }
+    log(
+      'Preference "$_hiddenErpPrefsKey" now: '
+      '${p.getString(_hiddenErpPrefsKey) ?? '(empty)'}',
+      name: 'HiddenTasks',
+    );
+  }
+
+  void _logHiddenErpTasks(String stage) {
+    if (_hiddenErpUntil.isEmpty) {
+      log('Hidden ERP tasks ($stage): none', name: 'HiddenTasks');
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final summary = _hiddenErpUntil.entries
+        .map((e) => '${e.key} (${((e.value - now) / 1000).ceil()}s left)')
+        .join(', ');
+    log('Hidden ERP tasks ($stage): $summary', name: 'HiddenTasks');
   }
 }
