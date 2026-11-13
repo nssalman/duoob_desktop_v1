@@ -43,7 +43,7 @@ class Constants{
       : 'https://rakp.rpsmart.com/version2/mydashboard.aspx';
 
   static const String myRakpUrl = isUat
-      ? 'https://uat-rakp.rpsmart.com/version2/index.aspx'
+      ? 'https://sandbox.rpsmart.com/RAKPHR/version2/SignIn.aspx'
       : 'https://rakp.rpsmart.com/version2/index.aspx';
 
   static const String d365WorkflowSubmissionUrl = isUat

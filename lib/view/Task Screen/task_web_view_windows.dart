@@ -5,6 +5,7 @@ import 'dart:developer';
 import 'package:duoob_desktop_app_v1/main.dart';
 import 'package:duoob_desktop_app_v1/services/download_services.dart';
 import 'package:duoob_desktop_app_v1/utils/constants.dart';
+import 'package:duoob_desktop_app_v1/view/Task%20Screen/new_vindow_screen.dart';
 import 'package:duoob_desktop_app_v1/view/components/interactive_loading_view.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -670,21 +671,30 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
                     _handleNavigationUrl(request.url.toString());
                   },
 
-                  // Pages open popups with window.open() — most importantly
-                  // the Microsoft sign-in popup used by the Power BI
-                  // dashboard. Attach a child webview to the popup via its
-                  // windowId so WebView2 drives the navigation, the popup
-                  // shares the opener's session, and the page's own script
-                  // can close it when sign-in completes.
+                  // Pages open popups with window.open().
+                  // Auth (e.g. Microsoft / Power BI sign-in) stays a small
+                  // dialog; everything else (tasks, details) opens fullscreen.
                   onCreateWindow: (controller, createWindowAction) async {
                     if (!mounted) return false;
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (dialogContext) => _PopupWebViewDialog(
-                        createWindowAction: createWindowAction,
-                      ),
-                    );
+                    if (_isCompactAuthPopup(createWindowAction)) {
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (dialogContext) => _PopupWebViewDialog(
+                          createWindowAction: createWindowAction,
+                        ),
+                      );
+                    } else {
+                      unawaited(
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => NewTaskViewScreen(
+                              createWindowRequest: createWindowAction,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
                     return true;
                   },
                   onDownloadStart: (controller, url) async {
@@ -814,7 +824,37 @@ class _TaskWebViewWindowsState extends State<TaskWebViewWindows> {
   }
 }
 
-/// Hosts a window.open() popup (e.g. the Microsoft sign-in window) inside a
+/// True for compact auth popups (Microsoft / Power BI sign-in).
+///
+/// MSAL often opens with `about:blank` first, then redirects to
+/// login.microsoftonline.com — so we also treat small explicit
+/// [WindowFeatures] sizes as auth (typical MSAL: ~483×600).
+bool _isCompactAuthPopup(CreateWindowAction action) {
+  final rawUrl = action.request.url?.toString() ?? '';
+  if (_isAuthLoginUrl(rawUrl)) return true;
+
+  final features = action.windowFeatures;
+  final width = features?.width;
+  final height = features?.height;
+  if (width != null && height != null && width > 0 && height > 0) {
+    // Auth popups request a constrained size; task windows usually do not.
+    return width <= 700 && height <= 800;
+  }
+  return false;
+}
+
+bool _isAuthLoginUrl(String url) {
+  final lower = url.toLowerCase();
+  if (lower.isEmpty || lower == 'about:blank') return false;
+  return lower.contains('login.microsoftonline.com') ||
+      lower.contains('login.microsoft.com') ||
+      lower.contains('login.live.com') ||
+      lower.contains('account.microsoft.com') ||
+      lower.contains('/oauth2/') ||
+      lower.contains('app.powerbi.com/signin');
+}
+
+/// Hosts a window.open() auth popup (e.g. Microsoft sign-in) inside a
 /// dialog. The webview is attached to the popup through [windowId], which
 /// keeps the `window.opener` link alive — required for auth popups to report
 /// the result back and close themselves (handled by [onCloseWindow]).
@@ -826,12 +866,22 @@ class _PopupWebViewDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final features = createWindowAction.windowFeatures;
+    final preferredWidth = features?.width;
+    final preferredHeight = features?.height;
+    final dialogWidth = (preferredWidth != null && preferredWidth > 0)
+        ? preferredWidth.clamp(420.0, size.width - 48)
+        : (size.width * 0.45).clamp(420.0, 560.0);
+    final dialogHeight = (preferredHeight != null && preferredHeight > 0)
+        ? preferredHeight.clamp(480.0, size.height - 48)
+        : (size.height * 0.7).clamp(480.0, 720.0);
+
     return Dialog(
       insetPadding: const EdgeInsets.all(24),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        width: (size.width * 0.6).clamp(480.0, 900.0),
-        height: (size.height * 0.8).clamp(480.0, 900.0),
+        width: dialogWidth.toDouble(),
+        height: dialogHeight.toDouble(),
         child: Column(
           children: [
             Material(
